@@ -17,15 +17,15 @@ You'll need to do a few things to set up your computing environment for this all
 
 1.	Make sure Java is installed (it almost certainly is if you can run BEAST).
     a.	From the command line, type `java -version`.
-2.	Checkout the 'repeated_measures' branch of BEAST and build the 'beast.jar' file using Ant (in case you don't usually build BEAST this way, I've attached a 'beast.jar' file that should work).
-3.	Create a `BEAST_HOME` environment variable that points to the directory where you have BEAST installed (or the location of the 'beast.jar' file I sent you).
+2.	Checkout the 'repeated_measures' branch of BEAST and build the 'beast.jar' file using Ant (in case you don't usually build BEAST this way, I've included a 'beast.jar' file in the repo that should work).
+3.	Create a `BEAST_HOME` environment variable that points to the directory where you have BEAST installed (or the location of this repo if you're using the included 'beast.jar' file).
 4.	Make sure you have R installed with the ggplot2 package.
 5.	Install Julia 1.4 or later (https://julialang.org/downloads/).
 6.	Unpack the zip file I sent you (or copy its contents into another folder).
 7.	Install relevant Julia packages by running the 'julia_setup.jl' script. To do this on the command line, navigate to the unpacked zip folder and type `julia julia_setup.jl`.
     a.	One of the Julia packages lets Julia run R code. This can be tricky to install depending on how R is installed, but usually works fine. If it doesn't work, let me know and I can send you a separate R script for plotting.
 8.	Make sure Julia can run BEAST by entering `julia -e "using BeastUtils.RunBeast; RunBeast.check_beast()"` into the command line. If everything is setup correctly, you should see the BEAST intro text followed by "Java and BEAST checks suceeded." If it doesn't work, please send me the error message you get.
-9.	Finally, to make sure everything works, run the 'pipeline.jl' in the zip file I sent you. To do this from the command line, navigate to the folder containing the 'pipeline.jl' file and enter `julia pipeline.jl` into the command line. This should run a small example to make sure everything is working. If it works, you should see a 'mammals_example' folder appear with a 'mammals_example.pdf' containing a plot of the loadings. This should take a few minutes.
+9.	Finally, to make sure everything works, run the 'pipeline.jl' in the this repo. To do this from the command line, navigate to the folder containing the 'pipeline.jl' file and enter `julia pipeline.jl` into the command line. This should run a small example to make sure everything is working. If it works, you should see a 'mammals_example' folder appear with a 'mammals_example.pdf' containing a plot of the loadings. This should take a few minutes.
 
 ## Instructions
 To run your own examples, you'll need to add the following to the 'data' folder in the unpacked zip file.
@@ -44,7 +44,7 @@ Because the specific parameters for the model selection vary from analysis to an
 Finally, you need to set up the 'instructions.jl' file. Open this file in any text editor and replace the 'name' variable with whatever you want to. If you're running the amphibians dataset for the first time, then you could change it to "amphibians1", for example. You also have to rename the 'data_filename', 'newick_filename', 'instructions_filename', and 'labels_filename' variables to the appropriate filenames.
 
 
-Once all that is done, just navigate to the directory of the unpacked zip folder and type `julia pipeline.jl` into the command line. For your first run, I'd recommend setting the `chain_length` in the model selection instructions to something low (like 100) just to make sure everything works without wasting a lot of time. Once you do that, you can delete the folder it just created (the default behavior is to not overwrite files you've already created), set the chain length longer, and rerun.
+Once all that is done, just navigate to this repo in the command line and type `julia pipeline.jl`. For your first run, I'd recommend setting the `chain_length` in the model selection instructions to something low (like 100) just to make sure everything works without wasting a lot of time. Once you do that, you can delete the folder it just created (the default behavior is to not overwrite files you've already created), set the chain length longer, and rerun.
 
 
 The log file ending in 'svd.log' is what you should use to determine if the chain ran for long enough. That won't get created until the end though. If you want to get a sense of intermediate process, you can look at any log file, just ignore any entries corresponding to the loadings since you can't get a good estimate of those until post-processing.
