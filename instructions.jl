@@ -26,14 +26,14 @@ const PLOT_LOADINGS = true # make plot summarizing the loadings matrix
 const OVERWRITE = false
 
 ## BEAST-specific instructions
-const SLE = 1000 # frequency at which BEAST logs to screen
+const SLE = 10 # frequency at which BEAST logs to screen
 
 
 ## Relevant files specific to this run
 
 
 ## Model selection variables
-const REPEATS = 5 # how many cross-validation sets do you want to run
+const REPEATS = 2 # how many cross-validation sets do you want to run
 const SPARSITY = 0.1 # what proportion of data to withold for cross-validation
 const SELECTION_BURNIN = 0.5 # burnin for model selection (i.e. the proportion of
                              # states that will be ignored when calculating the

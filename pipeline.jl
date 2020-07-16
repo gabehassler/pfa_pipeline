@@ -520,7 +520,7 @@ if PLOT_LOADINGS
 # nms = string.(names(CSV.read(data_path)))
 
 labels_df = CSV.read(metadata_path)
-cat_levs = unique(categories)
+cat_levs = unique(labels_df.cat)
 
 nm = final_run.filename
 csv_path = "$nm.csv"
@@ -537,7 +537,7 @@ fact = 1:k_effective
 # below needed to avoid issues with '°' character for temperatures
 tmp_path = "tmp.csv"
 @rput tmp_path
-CSV.write(tmp_path, DataFrame(levs = pretty_names))
+CSV.write(tmp_path, DataFrame(levs = labels_df.pretty))
 
 R"""
 pretty_names <- read.csv(tmp_path)$levs
