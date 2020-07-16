@@ -26,6 +26,7 @@ const PLOT_LOADINGS = true # make plot summarizing the loadings matrix
 const OVERWRITE = false
 
 ## BEAST-specific instructions
+const BEAST_HOME = @__DIR__ # set this to your beast location
 const SLE = 10 # frequency at which BEAST logs to screen
 
 

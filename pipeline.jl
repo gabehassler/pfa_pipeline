@@ -292,7 +292,9 @@ if RUN_SELECTION_XML
         for i = 1:n_opts
             run = xmlruns[i, j]
             xml_path = joinpath(select_xml_dir, "$(run.filename).xml")
-            RunBeast.run_beast(xml_path, seed = BEAST_SEED, overwrite = OVERWRITE)
+            RunBeast.run_beast(xml_path, seed = BEAST_SEED,
+                               overwrite = OVERWRITE,
+                               beast_jar = joinpath(BEAST_HOME, "beast.jar"))
             log_name = "$(run.filename).log"
 
             col, data = Logs.get_log_match(log_name, "removed.", burnin = SELECTION_BURNIN)
@@ -330,7 +332,8 @@ if MAKE_FINAL_XML
 end
 if RUN_FINAL_XML
     RunBeast.run_beast(final_run.filename * ".xml", seed = BEAST_SEED,
-                       overwrite = OVERWRITE)
+                       overwrite = OVERWRITE,
+                       beast_jar = joinpath(BEAST_HOME, "beast.jar"))
 end
 fn = final_run.filename
 svd_path = "$(fn)_svd.log"
