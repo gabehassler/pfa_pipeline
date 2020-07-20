@@ -59,7 +59,7 @@ function name_run!(run::XMLRun)
     nm = [base_name]
     if shrink
         @unpack shape_multiplier = run
-        shape_string = float2string(shape_multiplier)
+        shape_string = float2string(log10(shape_multiplier))
         push!(nm, "shape$shape_string")
     else
         @unpack k = run
