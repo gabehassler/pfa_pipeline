@@ -1,5 +1,6 @@
 *.html
 .ipynb_checkpoints/*
+.vscode/*
 *.csv
 *.xml
 *.log
