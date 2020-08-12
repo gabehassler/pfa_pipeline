@@ -37,7 +37,7 @@ const FINAL_FILE_FREQUENCY = 100
 
 ## Model selection variables
 const REPEATS = 1 # how many cross-validation sets do you want to run
-const SPARSITY = 0.25 # what proportion of data to withold for cross-validation
+const SPARSITY = 0.1 # what proportion of data to withold for cross-validation
 const SELECTION_BURNIN = 0.5 # burnin for model selection (i.e. the proportion of
                              # states that will be ignored when calculating the
                              # posterior mean predictive likelihood)
