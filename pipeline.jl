@@ -1,5 +1,5 @@
 using BeastUtils.XMLConstructor, BeastUtils.DataStorage, BeastUtils.MatrixUtils,
-        BeastUtils.RunBeast, BeastUtils.Logs
+        BeastUtils.RunBeast, BeastUtils.Logs, BeastUtils.BeastNames
 
 push!(LOAD_PATH, @__DIR__)
 using SpecialSVDProcessing
@@ -12,6 +12,16 @@ import Random
 Random.seed!(JULIA_SEED)
 
 const FIX_GLOBAL = false
+
+const LPD_STAT = "LPD"
+const MSE_STAT = "MSE"
+const NO_STAT = ""
+partition_dict = Dict(LPD_STAT => true, MSE_STAT => false)
+label_dict = Dict(LPD_STAT => "removed.", MSE_STAT => "TODO")
+mult_dict = Dict(LPD_STAT => 1, MSE_STAT => -1)
+const PARTITION_MISSING = partition_dict[SELECTION_STATISTIC]
+const STAT_LABEL = label_dict[SELECTION_STATISTIC]
+const STAT_MULT = mult_dict[SELECTION_STATISTIC]
 
 
 mutable struct XMLRun
@@ -29,6 +39,7 @@ mutable struct XMLRun
     chain_length::Int
     file_freq::Int
     L_init::Matrix{Float64}
+    selection_stat::String
 end
 
 function XMLRun(name::String, newick::String, taxa::Vector{String}, data::Matrix{Float64})
@@ -43,7 +54,7 @@ function XMLRun(name::String, newick::String, taxa::Vector{String}, data::Matrix
                 "in the data matrix.")
     end
     return XMLRun(newick, taxa, data, nothing, k, false, NaN, NaN,
-                  0, name, "", 100, 10, zeros(k, p))
+                  0, name, "", 100, 10, zeros(k, p), LPD_STAT)
 end
 
 import Base.copy
@@ -51,7 +62,7 @@ function Base.copy(run::XMLRun)
     return XMLRun(run.newick, run.taxa, run.data, run.missing_data, run.k,
                     run.shrink, run.shape_multiplier, run.scale_multiplier,
                     run.rep, run.base_name, run.filename, run.chain_length,
-                    run.file_freq, run.L_init)
+                    run.file_freq, run.L_init, run.selection_stat)
 end
 
 function name_run!(run::XMLRun)
@@ -95,6 +106,7 @@ function make_xml(run::XMLRun, dir::String; standardize::Bool = false, log_facto
     L_init = run.L_init
     mult_shape = run.shape_multiplier
     mult_scale = run.scale_multiplier
+    selection_stat = run.selection_stat
 
     shapes = fill(mult_shape, k - 1)
     scales = fill(mult_scale, k - 1)
@@ -139,9 +151,27 @@ function make_xml(run::XMLRun, dir::String; standardize::Bool = false, log_facto
         msop.fix_globals = true
     end
 
-    if !isnothing(removed_data)
-        flpd = XMLConstructor.FactorLogPredictiveDensity(facs, like)
-        XMLConstructor.add_loggable(bx, flpd, already_made = false)
+    if !isnothing(removed_data) && selection_stat != NO_STAT
+        if selection_stat == LPD_STAT
+            flpd = XMLConstructor.FactorLogPredictiveDensity(facs, like)
+            XMLConstructor.add_loggable(bx, flpd, already_made = false)
+        elseif selection_stat == MSE_STAT
+            tree_model = XMLConstructor.get_treeModel(bx)
+
+            trait_validation =
+                XMLConstructor.TraitValidationXMLElement(tree_model, like)
+
+            cross_validation =
+                XMLConstructor.CrossValidationXMLElement(trait_validation)
+
+            XMLConstructor.set_validation_type!(cross_validation,
+                                                BeastNames.SQUARED_ERROR)
+
+            set_log_sum!(cross_validation, true)
+
+            XMLConstructor.add_loggable(bx, cross_validation,
+                                        already_made=false)
+        end
     end
     path = joinpath(dir, run.filename * ".xml")
     # @show path
@@ -149,7 +179,8 @@ function make_xml(run::XMLRun, dir::String; standardize::Bool = false, log_facto
     return path
 end
 
-function remove_observations(data::Matrix{Float64}, sparsity::Float64)
+function remove_observations(data::Matrix{Float64}, sparsity::Float64;
+                             partition::Bool = PARTITION_MISSING)
     if !(0.0 <= sparsity <= 1.0)
         error("Must specify a sparsity between 0.0 and 1.0")
     end
@@ -160,7 +191,7 @@ function remove_observations(data::Matrix{Float64}, sparsity::Float64)
     for i = 1:length(data)
         if rand() < sparsity
             obs_data[i] = NaN
-        else
+        elseif partition
             mis_data[i] = NaN
         end
     end
@@ -181,13 +212,14 @@ function safe_csvwrite(path::String, df::DataFrame; overwrite::Bool = true)
 end
 
 
-function get_lpds(runs::Array{XMLRun}, log_dir::String; burnin::Float64 = 0.1)
+function get_lpds(runs::Array{XMLRun}, log_dir::String; burnin::Float64 = 0.1,
+                  stat_intro::String = "removed.")
     lpds = zeros(size(runs))
     for i = 1:length(runs)
         log_path = joinpath(log_dir, "$(runs[i].filename).log")
-        col, data = Logs.get_log_match(log_path, "removed.", burnin = burnin)
+        col, data = Logs.get_log_match(log_path, stat_intro, burnin = burnin)
         @assert length(col) == 1
-        lpds[i] = mean(data)
+        lpds[i] = STAT_MULT * mean(data)
     end
     return lpds
 end

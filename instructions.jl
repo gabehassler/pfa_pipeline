@@ -42,6 +42,11 @@ const SELECTION_BURNIN = 0.5 # burnin for model selection (i.e. the proportion o
                              # states that will be ignored when calculating the
                              # posterior mean predictive likelihood)
 
+const SELECTION_STATISTIC = "MSE" # specific statistic you're trying to maximize (or minimize)
+                                  # Options are:
+                                  #     1) "LPD" - log predictive density
+                                  #     2) "MSE" - mean squared error
+
 ## Plotting files and variables
 
 const KEEP_THRESHOLD = 0.90 # proportion of posterior samples that must be on
