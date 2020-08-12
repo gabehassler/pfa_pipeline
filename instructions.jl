@@ -26,16 +26,18 @@ const PLOT_LOADINGS = true # make plot summarizing the loadings matrix
 const OVERWRITE = false
 
 ## BEAST-specific instructions
-const BEAST_HOME = @__DIR__ # set this to your beast location
-const SLE = 10 # frequency at which BEAST logs to screen
+const BEAST_HOME = @__DIR__ # set this to the directory where your beast.jar file is located
+const SLE = 1000 # frequency at which BEAST logs to screen
+const FINAL_CHAIN_LENGTH = 100000
+const FINAL_FILE_FREQUENCY = 100
 
 
 ## Relevant files specific to this run
 
 
 ## Model selection variables
-const REPEATS = 2 # how many cross-validation sets do you want to run
-const SPARSITY = 0.1 # what proportion of data to withold for cross-validation
+const REPEATS = 1 # how many cross-validation sets do you want to run
+const SPARSITY = 0.25 # what proportion of data to withold for cross-validation
 const SELECTION_BURNIN = 0.5 # burnin for model selection (i.e. the proportion of
                              # states that will be ignored when calculating the
                              # posterior mean predictive likelihood)
@@ -44,7 +46,7 @@ const SELECTION_BURNIN = 0.5 # burnin for model selection (i.e. the proportion o
 
 const KEEP_THRESHOLD = 0.90 # proportion of posterior samples that must be on
                             # the same side of 0.0 to be inlcuded in plot
-const PLOT_BURNIN = 0.6 # burnin for loadings plot
+const PLOT_BURNIN = 0.5 # burnin for loadings plot
 
 
 ## Random number seeds
