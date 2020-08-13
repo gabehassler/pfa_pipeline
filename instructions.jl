@@ -4,13 +4,13 @@
 ## variables you MUST specify
 ################################################################################
 
-name = "mammals_example" # this will be the folder name that the results are stored
+name = "sarah_mse" # this will be the folder name that the results are stored
                     # in as well as the name of the final xml and log files
 
-data_filename = "mammals_log_data.csv" # csv file where the data are stored (must be in ./data directory)
-newick_filename = "mammals_trimmed_newick.txt" # file where the newick tree is stored (must be in ./data directory)
-instructions_filename = "mammals_selection.csv" # csv file with relevant instructions for model selection
-labels_filename = "mammals_labels.csv" # stores labeling information (and order) for loadings plot
+data_filename = "Chameleons_nop_data.csv" # csv file where the data are stored (must be in ./data directory)
+newick_filename = "tree_nop.txt" # file where the newick tree is stored (must be in ./data directory)
+instructions_filename = "chameleon_selection_nop.csv" # csv file with relevant instructions for model selection
+labels_filename = "Chameleons_nop_labels.csv" # stores labeling information (and order) for loadings plot
 
 
 ################################################################################
@@ -23,13 +23,13 @@ const RUN_SELECTION_XML = true # run model selection xml files
 const MAKE_FINAL_XML = true # make final xml file
 const RUN_FINAL_XML = true # run final xml file
 const PLOT_LOADINGS = true # make plot summarizing the loadings matrix
-const OVERWRITE = false
+const OVERWRITE = true
 
 ## BEAST-specific instructions
 const BEAST_HOME = @__DIR__ # set this to the directory where your beast.jar file is located
 const SLE = 1000 # frequency at which BEAST logs to screen
-const FINAL_CHAIN_LENGTH = 100000
-const FINAL_FILE_FREQUENCY = 100
+const FINAL_CHAIN_LENGTH = 10000 # chain length for final xml run
+const FINAL_FILE_FREQUENCY = 10 # log-to-file frequency for final xml run
 
 
 ## Relevant files specific to this run

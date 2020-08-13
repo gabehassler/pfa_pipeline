@@ -17,7 +17,7 @@ const LPD_STAT = "LPD"
 const MSE_STAT = "MSE"
 const NO_STAT = ""
 partition_dict = Dict(LPD_STAT => true, MSE_STAT => false)
-label_dict = Dict(LPD_STAT => "removed.", MSE_STAT => "TODO")
+label_dict = Dict(LPD_STAT => "removed.", MSE_STAT => "traitValidation.TotalSum")
 mult_dict = Dict(LPD_STAT => 1, MSE_STAT => -1)
 const PARTITION_MISSING = partition_dict[SELECTION_STATISTIC]
 const STAT_LABEL = label_dict[SELECTION_STATISTIC]
@@ -72,10 +72,11 @@ function name_run!(run::XMLRun)
         @unpack shape_multiplier = run
         shape_string = float2string(log10(shape_multiplier))
         push!(nm, "shape$shape_string")
-    else
-        @unpack k = run
-        push!(nm, "k$k")
+    # else
+
     end
+    @unpack k = run
+    push!(nm, "k$k")
     push!(nm, "r$rep")
     run.filename = join(nm, '_')
     return run.filename
@@ -167,7 +168,7 @@ function make_xml(run::XMLRun, dir::String; standardize::Bool = false, log_facto
             XMLConstructor.set_validation_type!(cross_validation,
                                                 BeastNames.SQUARED_ERROR)
 
-            set_log_sum!(cross_validation, true)
+            XMLConstructor.set_log_sum!(cross_validation, true)
 
             XMLConstructor.add_loggable(bx, cross_validation,
                                         already_made=false)
@@ -209,19 +210,6 @@ function safe_csvwrite(path::String, df::DataFrame; overwrite::Bool = true)
         error("Cannot replace file '$path' with `overwrite` set to `false`.")
     end
     CSV.write(path, df)
-end
-
-
-function get_lpds(runs::Array{XMLRun}, log_dir::String; burnin::Float64 = 0.1,
-                  stat_intro::String = "removed.")
-    lpds = zeros(size(runs))
-    for i = 1:length(runs)
-        log_path = joinpath(log_dir, "$(runs[i].filename).log")
-        col, data = Logs.get_log_match(log_path, stat_intro, burnin = burnin)
-        @assert length(col) == 1
-        lpds[i] = STAT_MULT * mean(data)
-    end
-    return lpds
 end
 
 
@@ -286,6 +274,7 @@ for i = 1:n_opts
         run.rep = j
         run.chain_length = chain_length
         run.file_freq = fle
+        run.selection_stat = SELECTION_STATISTIC
 
         name_run!(run)
     end
@@ -329,9 +318,9 @@ if RUN_SELECTION_XML
                                beast_jar = joinpath(BEAST_HOME, "beast.jar"))
             log_name = "$(run.filename).log"
 
-            col, data = Logs.get_log_match(log_name, "removed.", burnin = SELECTION_BURNIN)
+            col, log_data = Logs.get_log_match(log_name, STAT_LABEL, burnin = SELECTION_BURNIN)
             @assert length(col) == 1
-            lpd_df[i, j] = mean(data)
+            lpd_df[i, j] = mean(log_data)
             safe_csvwrite(lpd_path, lpd_df, overwrite = true)
 
             mv(log_name,
@@ -345,7 +334,7 @@ end
 ## Find "best" shrinkage
 
 lpds = Matrix{Float64}(CSV.read(lpd_path))
-best_ind = findmax(vec(mean(lpds, dims = 2)))[2]
+best_ind = findmax(vec(STAT_MULT * mean(lpds, dims = 2)))[2]
 display(lpds)
 display(best_ind)
 
@@ -358,6 +347,8 @@ final_run.rep = 0
 final_run.data = data
 final_run.missing_data = nothing
 final_run.filename = name
+final_run.chain_length = FINAL_CHAIN_LENGTH
+final_run.file_freq = FINAL_FILE_FREQUENCY
 
 if MAKE_FINAL_XML
     xml = make_xml(final_run, pwd(); standardize = true, log_factors = true)
@@ -582,6 +573,7 @@ plot_loadings(csv_path, plot_path, pretty_names, cat_levs)
 rm(tmp_path)
 end
 
-taxa, F = process_for_factors(svd_path, name * "_factors.txt")
-@show maximum(abs.(F[:, 1]))
-@show maximum(abs.(F[:, 2]))
+taxa, F = process_for_factors(svd_path, name * "_factors.txt");
+# @show maximum(abs.(F[:, 1]))
+# @show maximum(abs.(F[:, 2]))
+cd(@__DIR__)
