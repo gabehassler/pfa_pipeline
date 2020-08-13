@@ -48,6 +48,8 @@ function process_log(log_path::String, header::Union{Regex, String}, k::Int,
     ke = length(relevant_rows)
     pe = length(relevant_cols)
 
+    do_svd = ke != 0
+
     other_rows = setdiff(1:k, relevant_rows)
     other_cols = setdiff(1:k, relevant_cols)
 
@@ -74,25 +76,26 @@ function process_log(log_path::String, header::Union{Regex, String}, k::Int,
             my_show(L, "L")
         end
 
+        if do_svd
+            s = svd(L)
+            for j = 2:ke
+                @assert s.S[j - 1] >= s.S[j]
+            end
+            # rotate_svd!(s, cols = rotation_cols)
+            if DEBUG
+                L2 = s.U * Diagonal(s.S) * s.Vt
+                @assert maximum(abs.(L2 - L)) < 1e-12
+            end
 
-        s = svd(L)
-        for j = 2:ke
-            @assert s.S[j - 1] >= s.S[j]
-        end
-        # rotate_svd!(s, cols = rotation_cols)
-        if DEBUG
-            L2 = s.U * Diagonal(s.S) * s.Vt
-            @assert maximum(abs.(L2 - L)) < 1e-12
-        end
-
-        for j = 1:ke
-            d_storage[i, relevant_rows[j]] = s.S[j]
-            offset = (relevant_rows[j] - 1) * p
-            for l = 1:pe
-                col = relevant_cols[l]
-                ind = offset + col
-                v_storage[i, ind] = s.Vt[j, l]
-                l_storage[i, ind] = s.Vt[j, l] * s.S[j]
+            for j = 1:ke
+                d_storage[i, relevant_rows[j]] = s.S[j]
+                offset = (relevant_rows[j] - 1) * p
+                for l = 1:pe
+                    col = relevant_cols[l]
+                    ind = offset + col
+                    v_storage[i, ind] = s.Vt[j, l]
+                    l_storage[i, ind] = s.Vt[j, l] * s.S[j]
+                end
             end
         end
         for j = 1:(k - ke)
@@ -115,13 +118,18 @@ function process_log(log_path::String, header::Union{Regex, String}, k::Int,
         # l_storage[i, :] .= vec(s.Vt' * Diagonal(s.S))
 
         if rotate_factors
-            copyto!(Ft, @view f_data[i, fac_inds])
-            gemm!('T', 'N', 1.0, s.U, Ft, 0.0, UtFt)
+            if do_svd
+                copyto!(Ft, @view f_data[i, fac_inds])
+                gemm!('T', 'N', 1.0, s.U, Ft, 0.0, UtFt)
+                for j = 1:n_taxa
+                    offset = (j - 1) * k
+                    for l = 1:ke
+                        f_storage[i, offset + relevant_rows[l]] = UtFt[l, j]
+                    end
+                end
+            end
             for j = 1:n_taxa
                 offset = (j - 1) * k
-                for l = 1:ke
-                    f_storage[i, offset + relevant_rows[l]] = UtFt[l, j]
-                end
                 for l = 1:(k - ke)
                     ind = offset + other_rows[l]
                     f_storage[i, ind] = f_data[i, ind]
