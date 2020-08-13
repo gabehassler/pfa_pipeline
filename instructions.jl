@@ -60,5 +60,5 @@ const BEAST_SEED = 666 # the number of the BEAST (set to -1 for a random seed)
 
 ## General modeling choices
 
-CONSTRAIN_LOADINGS = true # set to `true` to enforce the constraint that the
+const CONSTRAIN_LOADINGS = true # set to `true` to enforce the constraint that the
                           # first trait only loads onto the first factor
