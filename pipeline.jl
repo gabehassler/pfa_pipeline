@@ -144,7 +144,8 @@ function make_xml(run::XMLRun, dir::String; standardize::Bool = false, log_facto
 
     lgo = ops[findfirst(x -> isa(x, XMLConstructor.LoadingsGibbsOperatorXMLElement), ops)]
     lgo.weight = Float64(3)
-    XMLConstructor.sparsity_constraint!(lgo, "hybrid")
+    sparsity_constraint = CONSTRAIN_LOADINGS ? "hybrid" : "none"
+    XMLConstructor.sparsity_constraint!(lgo, sparsity_constraint)
 
 
     if FIX_GLOBAL && shrink
@@ -360,10 +361,13 @@ if RUN_FINAL_XML
 end
 fn = final_run.filename
 svd_path = "$(fn)_svd.log"
+
+start_ind = CONSTRAIN_LOADINGS ? 2 : 1
+
 SpecialSVDProcessing.svd_logs("$fn.log", svd_path, final_run.k, size(data, 2),
                               rotate_factors = true,
-                              relevant_rows = collect(2:final_run.k),
-                              relevant_cols = collect(2:size(data, 2)))
+                              relevant_rows = collect(start_ind:final_run.k),
+                              relevant_cols = collect(start_ind:size(data, 2)))
 
 
 
