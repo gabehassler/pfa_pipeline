@@ -115,7 +115,7 @@ function make_xml(run::XMLRun, dir::String; standardize::Bool = false, log_facto
 
 
 
-    bx = XMLConstructor.make_PFA_XML(data, taxa, newick, k,
+    bx = XMLConstructor.make_pfa_xml(data, taxa, newick, k,
                                      useHMC = false,
                                      shrink_loadings = shrink,
                                      chain_length = chain_length,
@@ -130,7 +130,7 @@ function make_xml(run::XMLRun, dir::String; standardize::Bool = false, log_facto
                                             shapes = shapes,
                                             scales = scales)
     end
-    mbd = XMLConstructor.get_MBD(bx)
+    mbd = XMLConstructor.get_mbd(bx)
     facs = XMLConstructor.get_integratedFactorModel(bx)
     facs.standardize_traits = standardize
     XMLConstructor.set_loadings!(facs, L_init)
