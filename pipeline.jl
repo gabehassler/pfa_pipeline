@@ -436,8 +436,8 @@ function process_log(log_path::String, csv_path::String, data_path::String,
     row_counts = [count(x -> !ismissing(x), @view L[i, :]) for i = 1:k]
     col_counts = [count(x -> !ismissing(x), @view L[:, j]) for j = 1:p]
 
-    last_row = 0
-    for i = 1:k
+    last_row = 1
+    for i = 2:k
         if row_counts[i] > 1
             last_row = i
         end
