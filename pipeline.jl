@@ -12,6 +12,7 @@ import Random
 Random.seed!(JULIA_SEED)
 
 const FIX_GLOBAL = false
+const FIX_FIRST = true
 
 const LPD_STAT = "LPD"
 const MSE_STAT = "MSE"
@@ -117,6 +118,7 @@ function make_xml(run::XMLRun, dir::String; standardize::Bool = false, log_facto
 
     bx = XMLConstructor.make_pfa_xml(data, taxa, newick, k,
                                      useHMC = false,
+                                     rotate_prior = false,
                                      shrink_loadings = shrink,
                                      chain_length = chain_length,
                                      sle = SLE,
@@ -152,6 +154,11 @@ function make_xml(run::XMLRun, dir::String; standardize::Bool = false, log_facto
         msop = ops[findfirst(x -> isa(x, XMLConstructor.ShrinkageScaleOperators), ops)]
         msop.fix_globals = true
     end
+    if FIX_FIRST && shrink
+        msop = ops[findfirst(x -> isa(x, XMLConstructor.ShrinkageScaleOperators), ops)]
+        msop.fix_first = true
+    end
+
 
     if !isnothing(removed_data) && selection_stat != NO_STAT
         if selection_stat == LPD_STAT
