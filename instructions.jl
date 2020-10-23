@@ -4,7 +4,7 @@
 ## variables you MUST specify
 ################################################################################
 
-name = "yeast_new" # this will be the folder name that the results are stored
+name = "yeast4" # this will be the folder name that the results are stored
                     # in as well as the name of the final xml and log files
 
 data_filename = "yeast_continuous.csv" # csv file where the data are stored (must be in ./data directory)

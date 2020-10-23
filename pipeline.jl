@@ -2,7 +2,6 @@ using BeastUtils.XMLConstructor, BeastUtils.DataStorage, BeastUtils.MatrixUtils,
         BeastUtils.RunBeast, BeastUtils.Logs, BeastUtils.BeastNames
 
 push!(LOAD_PATH, @__DIR__)
-using SpecialSVDProcessing
 using CSV, DataFrames, LinearAlgebra, Statistics, UnPack
 
 cd(@__DIR__)
@@ -365,6 +364,8 @@ final_run.filename = name
 final_run.chain_length = FINAL_CHAIN_LENGTH
 final_run.file_freq = FINAL_FILE_FREQUENCY
 
+final_filename = final_run.filename * ".xml"
+
 if MAKE_FINAL_XML
     xml = make_xml(final_run, pwd(); standardize = true, log_factors = true)
 end
@@ -373,15 +374,14 @@ if RUN_FINAL_XML
                        overwrite = OVERWRITE,
                        beast_jar = joinpath(BEAST_HOME, "beast.jar"))
 end
-fn = final_run.filename
-svd_path = "$(fn)_svd.log"
+# svd_path = "$(fn)_svd.log"
 
-start_ind = CONSTRAIN_LOADINGS ? 2 : 1
+# start_ind = CONSTRAIN_LOADINGS ? 2 : 1
 
-SpecialSVDProcessing.svd_logs("$fn.log", svd_path, final_run.k, size(data, 2),
-                              rotate_factors = true,
-                              relevant_rows = collect(start_ind:final_run.k),
-                              relevant_cols = collect(start_ind:size(data, 2)))
+# SpecialSVDProcessing.svd_logs("$fn.log", svd_path, final_run.k, size(data, 2),
+#                               rotate_factors = true,
+#                               relevant_rows = collect(start_ind:final_run.k),
+#                               relevant_cols = collect(start_ind:size(data, 2)))
 
 
 
@@ -401,7 +401,7 @@ function process_log(log_path::String, csv_path::String, data_path::String,
 
     cols, data = get_log(log_path, burnin= PLOT_BURNIN)
     L_header = "L"
-    sv_header = "sv"
+    sv_header = "scale"
 
     L_inds = findall(x -> startswith(x, L_header), cols)
     sv_inds = findall(x -> startswith(x, sv_header), cols)
@@ -435,7 +435,7 @@ function process_log(log_path::String, csv_path::String, data_path::String,
     for i = 1:k
         for j in 1:p
             col = (i - 1) * p + j
-            @assert L_cols[col] == "$L_header$i$(j)"
+            @assert L_cols[col] == "$L_header.$i.$(j)"
             vals = @view(L_data[:, col])
             n_pos = count(x -> x > 0.0, vals)
             if n_pos > upper_threshold || n_pos < lower_threshold
@@ -482,7 +482,7 @@ end
 
 function process_for_factors(svd_path::String, out_path::String)
     cols, data = get_log(svd_path)
-    k = length(findall(x -> startswith(x, "sv"), cols))
+    k = length(findall(x -> startswith(x, "scale"), cols))
     fac_inds = findall(x -> startswith(x, "factors."), cols)
     fac_cols = cols[fac_inds]
     fac_means = vec(mean(data[:, fac_inds], dims = 1))
@@ -567,8 +567,9 @@ labels_df = CSV.read(metadata_path)
 cat_levs = unique(labels_df.cat)
 
 nm = final_run.filename
+final_log = nm * ".log"
 csv_path = "$nm.csv"
-k_effective = process_log(svd_path, csv_path, data_path, metadata_path, burnin = PLOT_BURNIN)
+k_effective = process_log(final_log, csv_path, data_path, metadata_path, burnin = PLOT_BURNIN)
 # display([nms pretty_names categories])
 @rput csv_path
 plot_path = "$nm.pdf"
@@ -591,7 +592,7 @@ plot_loadings(csv_path, plot_path, pretty_names, cat_levs)
 rm(tmp_path)
 end
 
-taxa, F = process_for_factors(svd_path, name * "_factors.txt");
+taxa, F = process_for_factors(final_log, name * "_factors.txt");
 # @show maximum(abs.(F[:, 1]))
 # @show maximum(abs.(F[:, 2]))
 cd(@__DIR__)
