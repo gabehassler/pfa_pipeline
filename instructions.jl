@@ -4,13 +4,13 @@
 ## variables you MUST specify
 ################################################################################
 
-name = "sarah_mse" # this will be the folder name that the results are stored
+name = "yeast_new" # this will be the folder name that the results are stored
                     # in as well as the name of the final xml and log files
 
-data_filename = "Chameleons_nop_data.csv" # csv file where the data are stored (must be in ./data directory)
-newick_filename = "tree_nop.txt" # file where the newick tree is stored (must be in ./data directory)
-instructions_filename = "chameleon_selection_nop.csv" # csv file with relevant instructions for model selection
-labels_filename = "Chameleons_nop_labels.csv" # stores labeling information (and order) for loadings plot
+data_filename = "yeast_continuous.csv" # csv file where the data are stored (must be in ./data directory)
+newick_filename = "yeast.txt" # file where the newick tree is stored (must be in ./data directory)
+instructions_filename = "yeast_selection.csv" # csv file with relevant instructions for model selection
+labels_filename = "yeast_labels.csv" # stores labeling information (and order) for loadings plot
 
 
 ################################################################################
@@ -42,7 +42,7 @@ const SELECTION_BURNIN = 0.5 # burnin for model selection (i.e. the proportion o
                              # states that will be ignored when calculating the
                              # posterior mean predictive likelihood)
 
-const SELECTION_STATISTIC = "MSE" # specific statistic you're trying to maximize (or minimize)
+const SELECTION_STATISTIC = "LPD" # specific statistic you're trying to maximize (or minimize)
                                   # Options are:
                                   #     1) "LPD" - log predictive density
                                   #     2) "MSE" - mean squared error
@@ -60,5 +60,5 @@ const BEAST_SEED = 666 # the number of the BEAST (set to -1 for a random seed)
 
 ## General modeling choices
 
-const CONSTRAIN_LOADINGS = true # set to `true` to enforce the constraint that the
-                          # first trait only loads onto the first factor
+const CONSTRAIN_LOADINGS = false # set to `true` to enforce the constraint that the
+                                # first trait only loads onto the first factor

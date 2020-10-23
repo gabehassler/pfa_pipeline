@@ -12,7 +12,7 @@ import Random
 Random.seed!(JULIA_SEED)
 
 const FIX_GLOBAL = false
-const FIX_FIRST = true
+const FIX_FIRST = false
 
 const LPD_STAT = "LPD"
 const MSE_STAT = "MSE"
@@ -55,7 +55,15 @@ function XMLRun(name::String, newick::String, taxa::Vector{String}, data::Matrix
                 "in the data matrix.")
     end
     return XMLRun(newick, taxa, data, nothing, k, false, NaN, NaN,
-                  0, name, "", 100, 10, zeros(k, p), LPD_STAT)
+                  0, name, "", 100, 10, default_loadings(k, p), LPD_STAT)
+end
+
+function default_loadings(k::Int, p::Int)
+    x = zeros(k, p)
+    for i = 1:min(k, p)
+        x[i, i] = 1.0
+    end
+    return x
 end
 
 import Base.copy
@@ -110,32 +118,26 @@ function make_xml(run::XMLRun, dir::String; standardize::Bool = false, log_facto
     mult_scale = run.scale_multiplier
     selection_stat = run.selection_stat
 
-    shapes = fill(mult_shape, k - 1)
-    scales = fill(mult_scale, k - 1)
+    shapes = fill(mult_shape, k)
+    shapes[1] = 2.0
+    scales = fill(mult_scale, k)
 
-
-
-
-    bx = XMLConstructor.make_pfa_xml(data, taxa, newick, k,
-                                     useHMC = false,
-                                     rotate_prior = false,
-                                     shrink_loadings = shrink,
+    bx = XMLConstructor.make_orthogonal_pfa_xml(data, taxa, newick, k,
                                      chain_length = chain_length,
                                      sle = SLE,
                                      fle = fle,
                                      log_factors = log_factors)
 
-    facs = XMLConstructor.get_integratedFactorModel(bx)
 
+    mbd = XMLConstructor.get_mbd(bx)
+    facs = XMLConstructor.get_integratedFactorModel(bx)
+    facs.standardize_traits = standardize
+    XMLConstructor.set_loadings!(facs, L_init)
     if shrink
         XMLConstructor.set_shrinkage_mults!(facs,
                                             shapes = shapes,
                                             scales = scales)
     end
-    mbd = XMLConstructor.get_mbd(bx)
-    facs = XMLConstructor.get_integratedFactorModel(bx)
-    facs.standardize_traits = standardize
-    XMLConstructor.set_loadings!(facs, L_init)
     like = XMLConstructor.get_traitLikelihood(bx)
 
     if !isnothing(removed_data)
@@ -144,20 +146,25 @@ function make_xml(run::XMLRun, dir::String; standardize::Bool = false, log_facto
 
     ops = XMLConstructor.get_operators(bx)
 
-    lgo = ops[findfirst(x -> isa(x, XMLConstructor.LoadingsGibbsOperatorXMLElement), ops)]
+    lgo = ops[findfirst(x -> isa(x, XMLConstructor.HMCOperatorXMLElement), ops)]
     lgo.weight = Float64(3)
-    sparsity_constraint = CONSTRAIN_LOADINGS ? "hybrid" : "none"
-    XMLConstructor.sparsity_constraint!(lgo, sparsity_constraint)
-
-
-    if FIX_GLOBAL && shrink
-        msop = ops[findfirst(x -> isa(x, XMLConstructor.ShrinkageScaleOperators), ops)]
-        msop.fix_globals = true
+    if CONSTRAIN_LOADINGS
+        error("not implemented")
+        sparsity_constraint = CONSTRAIN_LOADINGS ? "hybrid" : "none"
+        XMLConstructor.sparsity_constraint!(lgo, sparsity_constraint)
     end
-    if FIX_FIRST && shrink
-        msop = ops[findfirst(x -> isa(x, XMLConstructor.ShrinkageScaleOperators), ops)]
-        msop.fix_first = true
+
+    if FIX_GLOBAL || FIX_FIRST
+        error("not implemented")
     end
+    # if FIX_GLOBAL && shrink
+    #     msop = ops[findfirst(x -> isa(x, XMLConstructor.ShrinkageScaleOperators), ops)]
+    #     msop.fix_globals = true
+    # end
+    # if FIX_FIRST && shrink
+    #     msop = ops[findfirst(x -> isa(x, XMLConstructor.ShrinkageScaleOperators), ops)]
+    #     msop.fix_first = true
+    # end
 
 
     if !isnothing(removed_data) && selection_stat != NO_STAT
@@ -275,7 +282,7 @@ for i = 1:n_opts
     for j = 1:REPEATS
         run = xmlruns[i, j]
         run.k = k_max
-        run.L_init = zeros(k_max, P)
+        run.L_init = default_loadings(k_max, P)
         run.shrink = true
         run.shape_multiplier = shape
         run.scale_multiplier = scale
