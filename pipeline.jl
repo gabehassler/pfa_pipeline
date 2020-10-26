@@ -8,7 +8,9 @@ cd(@__DIR__)
 include("instructions.jl")
 
 import Random
-Random.seed!(JULIA_SEED)
+if (JULIA_SEED != -1)
+    Random.seed!(JULIA_SEED)
+end
 
 const FIX_GLOBAL = false
 const FIX_FIRST = false
