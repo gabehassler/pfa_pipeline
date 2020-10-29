@@ -14,6 +14,7 @@ end
 
 const FIX_GLOBAL = false
 const FIX_FIRST = false
+const BASE_SHAPE = 2.0
 
 const LPD_STAT = "LPD"
 const MSE_STAT = "MSE"
@@ -120,7 +121,7 @@ function make_xml(run::XMLRun, dir::String; standardize::Bool = false, log_facto
     selection_stat = run.selection_stat
 
     shapes = fill(mult_shape, k)
-    shapes[1] = 2.0
+    shapes[1] = BASE_SHAPE
     scales = fill(mult_scale, k)
 
     bx = XMLConstructor.make_orthogonal_pfa_xml(data, taxa, newick, k,
