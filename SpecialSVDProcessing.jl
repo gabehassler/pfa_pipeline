@@ -17,6 +17,7 @@ function process_log(log_path::String, header::Union{Regex, String}, k::Int,
                     fac_header::String = "factors.",
                     rotate_factors::Bool = false,
                     find_best::Bool = true,
+                    do_svd::Bool = true,
                     rotation_cols::Vector{Int} = zeros(Int, k),
                     transposed::Bool = false,
                     relevant_cols::Vector{Int} = collect(1:p),
@@ -48,7 +49,7 @@ function process_log(log_path::String, header::Union{Regex, String}, k::Int,
     ke = length(relevant_rows)
     pe = length(relevant_cols)
 
-    do_svd = ke != 0
+    do_svd = do_svd && ke != 0
 
     other_rows = setdiff(1:k, relevant_rows)
     other_cols = setdiff(1:k, relevant_cols)
@@ -63,6 +64,9 @@ function process_log(log_path::String, header::Union{Regex, String}, k::Int,
 
     fac_inds = vec([(i - 1) * k + row for row in relevant_rows, i in 1:n_taxa])
 
+    S = zeros(ke)
+    Vt = zeros(ke, pe)
+
     for i = 1:n
         fill_L!(L_full, L_data, i, transposed)
         for j = 1:pe
@@ -76,26 +80,39 @@ function process_log(log_path::String, header::Union{Regex, String}, k::Int,
             my_show(L, "L")
         end
 
+
         if do_svd
             s = svd(L)
-            for j = 2:ke
-                @assert s.S[j - 1] >= s.S[j]
-            end
-            # rotate_svd!(s, cols = rotation_cols)
-            if DEBUG
-                L2 = s.U * Diagonal(s.S) * s.Vt
-                @assert maximum(abs.(L2 - L)) < 1e-12
-            end
-
-            for j = 1:ke
-                d_storage[i, relevant_rows[j]] = s.S[j]
-                offset = (relevant_rows[j] - 1) * p
-                for l = 1:pe
-                    col = relevant_cols[l]
-                    ind = offset + col
-                    v_storage[i, ind] = s.Vt[j, l]
-                    l_storage[i, ind] = s.Vt[j, l] * s.S[j]
+            S .= s.S
+            Vt .= s.Vt
+        else
+            for i = 1:ke
+                S[i] = norm(@view L[i, :])
+                for j = 1:pe
+                    Vt[i, j] = L[i, j] / S[i]
                 end
+            end
+        end
+
+        if do_svd
+            for j = 2:ke
+                @assert S[j - 1] >= S[j]
+            end
+        end
+        # rotate_svd!(s, cols = rotation_cols)
+        if DEBUG
+            L2 = U * Diagonal(S) * Vt
+            @assert maximum(abs.(L2 - L)) < 1e-12
+        end
+
+        for j = 1:ke
+            d_storage[i, relevant_rows[j]] = S[j]
+            offset = (relevant_rows[j] - 1) * p
+            for l = 1:pe
+                col = relevant_cols[l]
+                ind = offset + col
+                v_storage[i, ind] = Vt[j, l]
+                l_storage[i, ind] = Vt[j, l] * S[j]
             end
         end
         for j = 1:(k - ke)
@@ -258,14 +275,17 @@ function svd_logs(path::String, new_path::String, k::Int, p::Int;
         fid::String = "factors.",
         rotate_factors::Bool = false,
         transposed::Bool = false,
+        do_svd::Bool = true,
         relevant_rows::Vector{Int} = collect(1:k),
         relevant_cols::Vector{Int} = collect(1:p))
+
     d, v, l, f = process_log(path, Lid, k, p, rotation_cols = cols,
                                 transposed = transposed,
                                 fac_header = fid,
                                 rotate_factors = rotate_factors,
                                 relevant_rows = relevant_rows,
-                                relevant_cols = relevant_cols)
+                                relevant_cols = relevant_cols,
+                                do_svd = do_svd)
     d_labels = ["sv$i" for i = 1:k]
     v_labels = vec(["V$i$j" for j = 1:p, i = 1:k])
     l_labels = vec(["L$i$j" for j = 1:p, i = 1:k])
