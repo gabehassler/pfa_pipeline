@@ -4,7 +4,7 @@
 ## variables you MUST specify
 ################################################################################
 
-name = "yeast4" # this will be the folder name that the results are stored
+name = "residuals" # this will be the folder name that the results are stored
                     # in as well as the name of the final xml and log files
 
 data_filename = "yeast_continuous.csv" # csv file where the data are stored (must be in ./data directory)
@@ -18,47 +18,47 @@ labels_filename = "yeast_labels.csv" # stores labeling information (and order) f
 ################################################################################
 
 ## Which parts of the pipeline get run
-const MAKE_SELECTION_XML = true # create selection xml files
-const RUN_SELECTION_XML = true # run model selection xml files
-const MAKE_FINAL_XML = true # make final xml file
-const RUN_FINAL_XML = true # run final xml file
-const PLOT_LOADINGS = true # make plot summarizing the loadings matrix
-const OVERWRITE = true
+MAKE_SELECTION_XML = false # create selection xml files
+RUN_SELECTION_XML = false # run model selection xml files
+MAKE_FINAL_XML = false # make final xml file
+RUN_FINAL_XML = false # run final xml file
+PLOT_LOADINGS = true # make plot summarizing the loadings matrix
+OVERWRITE = true
 
 ## BEAST-specific instructions
-const BEAST_HOME = @__DIR__ # set this to the directory where your beast.jar file is located
-const SLE = 1000 # frequency at which BEAST logs to screen
-const FINAL_CHAIN_LENGTH = 10000 # chain length for final xml run
-const FINAL_FILE_FREQUENCY = 10 # log-to-file frequency for final xml run
+BEAST_HOME = joinpath(@__DIR__, "beast.jar") # set this to the directory where your beast.jar file is located
+SLE = 1000 # frequency at which BEAST logs to screen
+FINAL_CHAIN_LENGTH = 100 # chain length for final xml run
+FINAL_FILE_FREQUENCY = 10 # log-to-file frequency for final xml run
 
 
 ## Relevant files specific to this run
 
 
 ## Model selection variables
-const REPEATS = 1 # how many cross-validation sets do you want to run
-const SPARSITY = 0.1 # what proportion of data to withold for cross-validation
-const SELECTION_BURNIN = 0.5 # burnin for model selection (i.e. the proportion of
+REPEATS = 1 # how many cross-validation sets do you want to run
+SPARSITY = 0.1 # what proportion of data to withold for cross-validation
+SELECTION_BURNIN = 0.5 # burnin for model selection (i.e. the proportion of
                              # states that will be ignored when calculating the
                              # posterior mean predictive likelihood)
 
-const SELECTION_STATISTIC = "LPD" # specific statistic you're trying to maximize (or minimize)
+SELECTION_STATISTIC = "MSE" # specific statistic you're trying to maximize (or minimize)
                                   # Options are:
                                   #     1) "LPD" - log predictive density
                                   #     2) "MSE" - mean squared error
 
 ## Plotting files and variables
 
-const KEEP_THRESHOLD = 0.90 # proportion of posterior samples that must be on
+KEEP_THRESHOLD = 0.90 # proportion of posterior samples that must be on
                             # the same side of 0.0 to be inlcuded in plot
-const PLOT_BURNIN = 0.5 # burnin for loadings plot
+PLOT_BURNIN = 0.5 # burnin for loadings plot
 
 
 ## Random number seeds
-const JULIA_SEED = 435094328702954 # random number seed for Julia (set to -1 for a random seed)
-const BEAST_SEED = 666 # the number of the BEAST (set to -1 for a random seed)
+JULIA_SEED = 666 # random number seed for Julia (set to -1 for a random seed)
+BEAST_SEED = 666 # the number of the BEAST (set to -1 for a random seed)
 
 ## General modeling choices
 
-const CONSTRAIN_LOADINGS = false # set to `true` to enforce the constraint that the
+CONSTRAIN_LOADINGS = false # set to `true` to enforce the constraint that the
                                 # first trait only loads onto the first factor

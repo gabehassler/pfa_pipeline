@@ -2,17 +2,16 @@ using BeastUtils.XMLConstructor, BeastUtils.DataStorage, BeastUtils.MatrixUtils,
         BeastUtils.RunBeast, BeastUtils.Logs, BeastUtils.BeastNames
 
 push!(LOAD_PATH, @__DIR__)
-using SpecialSVDProcessing
+using SpecialSVDProcessing, ImportVariables
 
-using CSV, DataFrames, LinearAlgebra, Statistics, UnPack
+using CSV, DataFrames, LinearAlgebra, Statistics, UnPack, RCall
+import Random
 
 cd(@__DIR__)
-include("instructions.jl")
 
-import Random
-if (JULIA_SEED != -1)
-    Random.seed!(JULIA_SEED)
-end
+
+
+
 
 const FIX_GLOBAL = false
 const FIX_FIRST = false
@@ -21,12 +20,10 @@ const BASE_SHAPE = 2.0
 const LPD_STAT = "LPD"
 const MSE_STAT = "MSE"
 const NO_STAT = ""
-partition_dict = Dict(LPD_STAT => true, MSE_STAT => false)
-label_dict = Dict(LPD_STAT => "removed.", MSE_STAT => "traitValidation.TotalSum")
-mult_dict = Dict(LPD_STAT => 1, MSE_STAT => -1)
-const PARTITION_MISSING = partition_dict[SELECTION_STATISTIC]
-const STAT_LABEL = label_dict[SELECTION_STATISTIC]
-const STAT_MULT = mult_dict[SELECTION_STATISTIC]
+const partition_dict = Dict(LPD_STAT => true, MSE_STAT => false)
+const label_dict = Dict(LPD_STAT => "removed.", MSE_STAT => "traitValidation.TotalSum")
+const mult_dict = Dict(LPD_STAT => 1, MSE_STAT => -1)
+
 
 
 mutable struct XMLRun
@@ -107,7 +104,8 @@ function float2string(x::Float64; keep_decimals::Int = 1)
 end
 
 
-function make_xml(run::XMLRun, dir::String; standardize::Bool = false, log_factors::Bool = false)
+function make_xml(run::XMLRun, vars::PipelineVariables, dir::String;
+                  standardize::Bool = false, log_factors::Bool = false)
 
     taxa = run.taxa
     data = run.data
@@ -128,7 +126,7 @@ function make_xml(run::XMLRun, dir::String; standardize::Bool = false, log_facto
 
     bx = XMLConstructor.make_orthogonal_pfa_xml(data, taxa, newick, k,
                                      chain_length = chain_length,
-                                     sle = SLE,
+                                     sle = vars.beast_sle,
                                      fle = fle,
                                      log_factors = log_factors)
 
@@ -152,7 +150,7 @@ function make_xml(run::XMLRun, dir::String; standardize::Bool = false, log_facto
 
     lgo = ops[findfirst(x -> isa(x, XMLConstructor.HMCOperatorXMLElement), ops)]
     lgo.weight = Float64(3)
-    if CONSTRAIN_LOADINGS
+    if vars.constrain_loadings
         error("not implemented")
         sparsity_constraint = CONSTRAIN_LOADINGS ? "hybrid" : "none"
         XMLConstructor.sparsity_constraint!(lgo, sparsity_constraint)
@@ -232,21 +230,246 @@ function safe_csvwrite(path::String, df::DataFrame; overwrite::Bool = true)
 end
 
 
-cd(@__DIR__)
-data_path = joinpath(@__DIR__, "data", data_filename)
-newick_path = joinpath(@__DIR__, "data", newick_filename)
-instructions_path = joinpath(@__DIR__, instructions_filename)
+# cd(@__DIR__)
+# data_path = joinpath(@__DIR__, "data", data_filename)
+# newick_path = joinpath(@__DIR__, "data", newick_filename)
+# instructions_path = joinpath(@__DIR__, instructions_filename)
 
-safe_mkdir(name)
+struct TreeData
+    newick::String
+    taxa::Vector{String}
+    data::Matrix{Float64}
+    N::Int
+    P::Int
 
-cd(name)
+    function TreeData(newick::String, taxa::Vector{String}, data::Matrix{Float64})
+        n, p = size(data)
+        @assert length(taxa) == n
+        return new(newick, taxa, data, n, p)
+    end
+end
+
+
+vars = import_variables()
+
+
+function run_pipeline(vars::PipelineVariables)
+    if (vars.julia_seed != -1)
+        Random.seed!(vars.julia_seed)
+    end
+
+    safe_mkdir(vars.name)
+
+    cd(vars.name)
+
+    newick = read(vars.newick_path, String)
+    taxa, data = DataStorage.csv_to_data(vars.data_path)
+
+    td = TreeData(newick, taxa, data)
+
+    ## model selection
+    best_model = model_selection(vars, td)
+
+    ## final run
+    run_final_xml(vars, best_model, data)
+
+    ## plot results
 
 
 
-newick = read(newick_path, String)
-taxa, data = DataStorage.csv_to_data(data_path)
-const N = length(taxa)
-const P = size(data, 2)
+    error("end")
+end
+
+function model_selection(vars::PipelineVariables, tree_data::TreeData)
+    mod_select_name = "selection"
+    select_dir = "selection"
+    safe_mkdir(select_dir)
+    select_xml_dir = joinpath(select_dir, "xml")
+    select_log_dir = joinpath(select_dir, "logs")
+    safe_mkdir(select_xml_dir)
+    safe_mkdir(select_log_dir)
+
+
+    ## Read instructions and setup xml files
+
+    df = CSV.read(vars.instructions_path)
+    n_opts = size(df, 1)
+    selection_data = copy(tree_data.data)
+    standardize_data!(selection_data)
+
+    xmlruns = [XMLRun(vars.name * "_" * mod_select_name, tree_data.newick,
+                    tree_data.taxa, selection_data)
+                    for i = 1:n_opts, j = 1:vars.repeats]
+
+    for i = 1:n_opts
+        k_max = df.k[i]
+        shape_exp = df.shape_exp[i]
+        shape = 10.0^shape_exp
+        # scale_exp = df.scale_exp[i]
+        # scale = 10.0^scale_exp
+        scale = 1.0
+        chain_length = df.chain_length[i]
+        fle = df.file_freq[i]
+        for j = 1:vars.repeats
+            run = xmlruns[i, j]
+            run.k = k_max
+            run.L_init = default_loadings(k_max, tree_data.P)
+            run.shrink = true
+            run.shape_multiplier = shape
+            run.scale_multiplier = scale
+            run.rep = j
+            run.chain_length = chain_length
+            run.file_freq = fle
+            run.selection_stat = vars.selection_statistic
+
+            name_run!(run)
+        end
+    end
+
+    if vars.make_selection_xml
+        for j = 1:vars.repeats
+            observed_data, missing_data =
+                    remove_observations(selection_data,
+                            vars.sparsity,
+                            partition = partition_dict[vars.selection_statistic])
+
+            for i = 1:n_opts
+                run = xmlruns[i, j]
+                run.data = observed_data
+                run.missing_data = missing_data
+            end
+
+        end
+
+        for run in xmlruns
+            make_xml(run, vars, select_xml_dir)
+        end
+    end
+
+    ## Run selection xml and store statistics
+
+    statistic_path = joinpath(select_dir, vars.selection_statistic * ".csv")
+
+    if vars.run_selection_xml
+        nms = [Symbol("run$i") for i = 1:vars.repeats]
+        statistic_df = DataFrame(zeros(n_opts, vars.repeats), nms)
+        safe_csvwrite(statistic_path, statistic_df, overwrite = vars.overwrite)
+        for j = 1:vars.repeats
+            for i = 1:n_opts
+                run = xmlruns[i, j]
+                xml_path = joinpath(select_xml_dir, "$(run.filename).xml")
+                RunBeast.run_beast(xml_path, seed = vars.beast_seed,
+                                   overwrite = vars.overwrite,
+                                   beast_jar = vars.beast_path)
+                log_name = "$(run.filename).log"
+
+                col, log_data = Logs.get_log_match(log_name,
+                                        label_dict[vars.selection_statistic],
+                                        burnin = vars.selection_burnin)
+                @assert length(col) == 1
+                statistic_df[i, j] = mean(log_data)
+                safe_csvwrite(statistic_path, statistic_df, overwrite = true)
+
+                mv(log_name,
+                    joinpath(select_log_dir, "$(run.filename).log"),
+                    force = vars.overwrite)
+            end
+        end
+    end
+
+    ## Figure out which model is best
+
+    lpds = Matrix{Float64}(CSV.read(statistic_path))
+    best_ind = findmax(vec(mult_dict[vars.selection_statistic] *
+                                                    mean(lpds, dims = 2)))[2]
+    display(lpds)
+    display(best_ind)
+
+    final_run = copy(xmlruns[best_ind, 1])
+    return final_run
+end
+
+function run_final_xml(vars::PipelineVariables, final_run::XMLRun, data::Matrix{Float64})
+    final_run.rep = 0
+    final_run.data = data
+    final_run.missing_data = nothing
+    final_run.filename = vars.name
+    final_run.chain_length = vars.final_chain_length
+    final_run.file_freq = vars.final_file_freq
+
+    final_filename = final_run.filename * ".xml"
+
+    if vars.make_final_xml
+        xml = make_xml(final_run, vars, pwd(); standardize = true, log_factors = true)
+    end
+
+    if vars.run_final_xml
+        RunBeast.run_beast(final_run.filename * ".xml", seed = vars.beast_seed,
+                           overwrite = vars.overwrite,
+                           beast_jar = vars.beast_path)
+    end
+
+    fn = final_run.filename
+    svd_path = "$(fn)_processed.log"
+
+    start_ind = vars.constrain_loadings ? 2 : 1
+
+    SpecialSVDProcessing.svd_logs("$fn.log", svd_path, final_run.k, size(data, 2),
+                                  rotate_factors = true,
+                                  do_svd = false,
+                                  relevant_rows = collect(start_ind:final_run.k),
+                                  relevant_cols = collect(start_ind:size(data, 2)))
+
+
+end
+
+function plot_loadings(vars::PipelineVariables)
+    metadata_path = vars.labels_path
+
+
+    if PLOT_LOADINGS
+
+        # cd(@__DIR__)
+        # nms = string.(names(CSV.read(data_path)))
+
+        labels_df = CSV.read(metadata_path)
+        cat_levs = unique(labels_df.cat)
+
+        nm = final_run.filename
+        # final_log = nm * ".log"
+        final_log = svd_path
+        csv_path = "$nm.csv"
+        k_effective = process_log(final_log, csv_path, data_path, metadata_path, burnin = PLOT_BURNIN)
+        # display([nms pretty_names categories])
+        @rput csv_path
+        plot_path = "$nm.pdf"
+        @rput plot_path
+        # @rput pretty_names
+        @rput cat_levs
+        fact = 1:k_effective
+        @rput fact
+
+        # below needed to avoid issues with '°' character for temperatures
+        tmp_path = "tmp.csv"
+        @rput tmp_path
+        CSV.write(tmp_path, DataFrame(levs = labels_df.pretty))
+
+        R"""
+        pretty_names <- read.csv(tmp_path)$levs
+        plot_loadings(csv_path, plot_path, pretty_names, cat_levs)
+        """
+
+        rm(tmp_path)
+    end
+
+    taxa, F = process_for_factors(final_log, name * "_factors.txt");
+end
+
+
+run_pipeline(vars)
+
+
+
 
 ################################################################################
 ## Step 1 - Determine the appropriate shrinkage
@@ -254,142 +477,25 @@ const P = size(data, 2)
 
 
 ## Read instructions and stup XML files
-mod_select_name = "selection"
-select_dir = "selection"
-safe_mkdir(select_dir)
-select_xml_dir = joinpath(select_dir, "xml")
-select_log_dir = joinpath(select_dir, "logs")
-safe_mkdir(select_xml_dir)
-safe_mkdir(select_log_dir)
-
-
-
-df = CSV.read(instructions_path)
-n_opts = size(df, 1)
-selection_data = copy(data)
-standardize_data!(selection_data)
-
-xmlruns = [XMLRun(name * "_" * mod_select_name, newick, taxa, selection_data)
-            for i = 1:n_opts, j = 1:REPEATS]
 
 # sv_threshold = 1e-1
 
-for i = 1:n_opts
-    k_max = df.k[i]
-    shape_exp = df.shape_exp[i]
-    shape = 10.0^shape_exp
-    # scale_exp = df.scale_exp[i]
-    # scale = 10.0^scale_exp
-    scale = 1.0
-    chain_length = df.chain_length[i]
-    fle = df.file_freq[i]
-    for j = 1:REPEATS
-        run = xmlruns[i, j]
-        run.k = k_max
-        run.L_init = default_loadings(k_max, P)
-        run.shrink = true
-        run.shape_multiplier = shape
-        run.scale_multiplier = scale
-        run.rep = j
-        run.chain_length = chain_length
-        run.file_freq = fle
-        run.selection_stat = SELECTION_STATISTIC
 
-        name_run!(run)
-    end
-end
 
-if MAKE_SELECTION_XML
-
-for j = 1:REPEATS
-    observed_data, missing_data = remove_observations(selection_data, SPARSITY)
-
-    for i = 1:n_opts
-        run = xmlruns[i, j]
-        run.data = observed_data
-        run.missing_data = missing_data
-    end
-
-end
-
-for run in xmlruns
-    make_xml(run, select_xml_dir)
-end
-
-end
 
 ## Run XML files
 
-lpd_path = joinpath(select_dir, "lpd.csv")
 
 
-
-if RUN_SELECTION_XML
-    nms = [Symbol("run$i") for i = 1:REPEATS]
-    lpd_df = DataFrame(zeros(n_opts, REPEATS), nms)
-    safe_csvwrite(lpd_path, lpd_df, overwrite = OVERWRITE)
-    for j = 1:REPEATS
-        for i = 1:n_opts
-            run = xmlruns[i, j]
-            xml_path = joinpath(select_xml_dir, "$(run.filename).xml")
-            RunBeast.run_beast(xml_path, seed = BEAST_SEED,
-                               overwrite = OVERWRITE,
-                               beast_jar = joinpath(BEAST_HOME, "beast.jar"))
-            log_name = "$(run.filename).log"
-
-            col, log_data = Logs.get_log_match(log_name, STAT_LABEL, burnin = SELECTION_BURNIN)
-            @assert length(col) == 1
-            lpd_df[i, j] = mean(log_data)
-            safe_csvwrite(lpd_path, lpd_df, overwrite = true)
-
-            mv(log_name,
-                joinpath(select_log_dir, "$(run.filename).log"),
-                force = OVERWRITE)
-        end
-    end
-end
 
 
 ## Find "best" shrinkage
 
-lpds = Matrix{Float64}(CSV.read(lpd_path))
-best_ind = findmax(vec(STAT_MULT * mean(lpds, dims = 2)))[2]
-display(lpds)
-display(best_ind)
+
 
 ################################################################################
 ## Actual run
 ################################################################################
-
-final_run = copy(xmlruns[best_ind, 1])
-final_run.rep = 0
-final_run.data = data
-final_run.missing_data = nothing
-final_run.filename = name
-final_run.chain_length = FINAL_CHAIN_LENGTH
-final_run.file_freq = FINAL_FILE_FREQUENCY
-
-final_filename = final_run.filename * ".xml"
-
-if MAKE_FINAL_XML
-    xml = make_xml(final_run, pwd(); standardize = true, log_factors = true)
-end
-if RUN_FINAL_XML
-    RunBeast.run_beast(final_run.filename * ".xml", seed = BEAST_SEED,
-                       overwrite = OVERWRITE,
-                       beast_jar = joinpath(BEAST_HOME, "beast.jar"))
-end
-
-fn = final_run.filename
-svd_path = "$(fn)_processed.log"
-
-start_ind = CONSTRAIN_LOADINGS ? 2 : 1
-
-SpecialSVDProcessing.svd_logs("$fn.log", svd_path, final_run.k, size(data, 2),
-                              rotate_factors = true,
-                              do_svd = false,
-                              relevant_rows = collect(start_ind:final_run.k),
-                              relevant_cols = collect(start_ind:size(data, 2)))
 
 
 
@@ -397,11 +503,6 @@ SpecialSVDProcessing.svd_logs("$fn.log", svd_path, final_run.k, size(data, 2),
 ## Plot results
 ################################################################################
 
-using BeastUtils.Logs
-
-using RCall, Statistics, DataFrames
-
-metadata_path = joinpath(@__DIR__, "data", labels_filename)
 
 
 function process_log(log_path::String, csv_path::String, data_path::String,
@@ -566,42 +667,6 @@ gc()
 }
 """
 
-if PLOT_LOADINGS
-
-# cd(@__DIR__)
-# nms = string.(names(CSV.read(data_path)))
-
-labels_df = CSV.read(metadata_path)
-cat_levs = unique(labels_df.cat)
-
-nm = final_run.filename
-# final_log = nm * ".log"
-final_log = svd_path
-csv_path = "$nm.csv"
-k_effective = process_log(final_log, csv_path, data_path, metadata_path, burnin = PLOT_BURNIN)
-# display([nms pretty_names categories])
-@rput csv_path
-plot_path = "$nm.pdf"
-@rput plot_path
-# @rput pretty_names
-@rput cat_levs
-fact = 1:k_effective
-@rput fact
-
-# below needed to avoid issues with '°' character for temperatures
-tmp_path = "tmp.csv"
-@rput tmp_path
-CSV.write(tmp_path, DataFrame(levs = labels_df.pretty))
-
-R"""
-pretty_names <- read.csv(tmp_path)$levs
-plot_loadings(csv_path, plot_path, pretty_names, cat_levs)
-"""
-
-rm(tmp_path)
-end
-
-taxa, F = process_for_factors(final_log, name * "_factors.txt");
 # @show maximum(abs.(F[:, 1]))
 # @show maximum(abs.(F[:, 2]))
 cd(@__DIR__)
