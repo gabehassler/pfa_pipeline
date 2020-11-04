@@ -25,6 +25,8 @@ function process_log(log_path::String, header::Union{Regex, String}, k::Int,
 
     cols, data = get_log(log_path, burnin = 0.0)
     L_inds = findall(x -> startswith(x, header), cols)
+    @show k
+    @show p
     @assert length(L_inds) == k * p
 
     f_inds = rotate_factors ? findall(x -> startswith(x, fac_header), cols) : Int[]

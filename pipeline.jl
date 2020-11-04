@@ -250,7 +250,7 @@ struct TreeData
 end
 
 
-vars = import_variables()
+
 
 
 function run_pipeline(vars::PipelineVariables)
@@ -271,13 +271,11 @@ function run_pipeline(vars::PipelineVariables)
     best_model = model_selection(vars, td)
 
     ## final run
-    run_final_xml(vars, best_model, data)
+    svd_path = run_final_xml(vars, best_model, data)
 
     ## plot results
 
-
-
-    error("end")
+    plot_loadings(vars, best_model, svd_path)
 end
 
 function model_selection(vars::PipelineVariables, tree_data::TreeData)
@@ -420,14 +418,14 @@ function run_final_xml(vars::PipelineVariables, final_run::XMLRun, data::Matrix{
                                   relevant_rows = collect(start_ind:final_run.k),
                                   relevant_cols = collect(start_ind:size(data, 2)))
 
-
+    return svd_path
 end
 
-function plot_loadings(vars::PipelineVariables)
+function plot_loadings(vars::PipelineVariables, final_run::XMLRun, svd_path::String)
     metadata_path = vars.labels_path
 
 
-    if PLOT_LOADINGS
+    if vars.plot_loadings
 
         # cd(@__DIR__)
         # nms = string.(names(CSV.read(data_path)))
@@ -439,7 +437,8 @@ function plot_loadings(vars::PipelineVariables)
         # final_log = nm * ".log"
         final_log = svd_path
         csv_path = "$nm.csv"
-        k_effective = process_log(final_log, csv_path, data_path, metadata_path, burnin = PLOT_BURNIN)
+        k_effective = process_log(vars, final_log, csv_path, vars.data_path,
+                                  metadata_path)
         # display([nms pretty_names categories])
         @rput csv_path
         plot_path = "$nm.pdf"
@@ -462,11 +461,10 @@ function plot_loadings(vars::PipelineVariables)
         rm(tmp_path)
     end
 
-    taxa, F = process_for_factors(final_log, name * "_factors.txt");
+    taxa, F = process_for_factors(final_log, final_run.filename * "_factors.txt");
 end
 
 
-run_pipeline(vars)
 
 
 
@@ -505,10 +503,11 @@ run_pipeline(vars)
 
 
 
-function process_log(log_path::String, csv_path::String, data_path::String,
-                     labels_path::String; burnin = 0.1)
+function process_log(vars::PipelineVariables, log_path::String,
+                     csv_path::String, data_path::String,
+                     labels_path::String)
 
-    cols, data = get_log(log_path, burnin= PLOT_BURNIN)
+    cols, data = get_log(log_path, burnin = vars.plot_burnin)
     L_header = "L"
     sv_header = "sv"
 
@@ -522,8 +521,8 @@ function process_log(log_path::String, csv_path::String, data_path::String,
     @assert r == 0
 
     n = size(data, 1)
-    upper_threshold = Int(floor(KEEP_THRESHOLD * n))
-    lower_threshold = Int(ceil((1.0 - KEEP_THRESHOLD) * n))
+    upper_threshold = Int(floor(vars.keep_threshold * n))
+    lower_threshold = Int(ceil((1.0 - vars.keep_threshold) * n))
 
     L = Matrix{Union{Missing, Float64}}(undef, k, p)
     fill!(L, missing)
@@ -582,7 +581,7 @@ function process_log(log_path::String, csv_path::String, data_path::String,
 
     df.trait = repeat(new_names, inner=last(keep_rows))
     df.cat = repeat(trait_types, inner=last(keep_rows))
-    safe_csvwrite(csv_path, df, overwrite = OVERWRITE)
+    safe_csvwrite(csv_path, df, overwrite = vars.overwrite)
 
     levs = df.trait
     return last_row
@@ -666,6 +665,10 @@ plot_factors <- function(csv_path, plot_name){
 gc()
 }
 """
+
+vars = import_variables()
+run_pipeline(vars)
+
 
 # @show maximum(abs.(F[:, 1]))
 # @show maximum(abs.(F[:, 2]))

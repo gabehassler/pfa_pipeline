@@ -4,7 +4,7 @@
 ## variables you MUST specify
 ################################################################################
 
-name = "residuals" # this will be the folder name that the results are stored
+name = "yeast5" # this will be the folder name that the results are stored
                     # in as well as the name of the final xml and log files
 
 data_filename = "yeast_continuous.csv" # csv file where the data are stored (must be in ./data directory)
@@ -18,9 +18,9 @@ labels_filename = "yeast_labels.csv" # stores labeling information (and order) f
 ################################################################################
 
 ## Which parts of the pipeline get run
-MAKE_SELECTION_XML = false # create selection xml files
+MAKE_SELECTION_XML = true # create selection xml files
 RUN_SELECTION_XML = false # run model selection xml files
-MAKE_FINAL_XML = false # make final xml file
+MAKE_FINAL_XML = true # make final xml file
 RUN_FINAL_XML = false # run final xml file
 PLOT_LOADINGS = true # make plot summarizing the loadings matrix
 OVERWRITE = true

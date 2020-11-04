@@ -13,7 +13,7 @@ mutable struct PipelineVariables
     run_selection_xml::Bool
     make_final_xml::Bool
     run_final_xml::Bool
-    plot_loadints::Bool
+    plot_loadings::Bool
 
     overwrite::Bool
 
