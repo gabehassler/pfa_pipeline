@@ -19,16 +19,16 @@ labels_filename = "yeast_labels.csv" # stores labeling information (and order) f
 
 ## Which parts of the pipeline get run
 MAKE_SELECTION_XML = true # create selection xml files
-RUN_SELECTION_XML = false # run model selection xml files
+RUN_SELECTION_XML = true # run model selection xml files
 MAKE_FINAL_XML = true # make final xml file
-RUN_FINAL_XML = false # run final xml file
+RUN_FINAL_XML = true # run final xml file
 PLOT_LOADINGS = true # make plot summarizing the loadings matrix
 OVERWRITE = true
 
 ## BEAST-specific instructions
 BEAST_HOME = joinpath(@__DIR__, "beast.jar") # set this to the directory where your beast.jar file is located
-SLE = 1000 # frequency at which BEAST logs to screen
-FINAL_CHAIN_LENGTH = 100 # chain length for final xml run
+SLE = 100 # frequency at which BEAST logs to screen
+FINAL_CHAIN_LENGTH = 10000 # chain length for final xml run
 FINAL_FILE_FREQUENCY = 10 # log-to-file frequency for final xml run
 
 
@@ -60,5 +60,5 @@ BEAST_SEED = 666 # the number of the BEAST (set to -1 for a random seed)
 
 ## General modeling choices
 
-CONSTRAIN_LOADINGS = false # set to `true` to enforce the constraint that the
+CONSTRAIN_LOADINGS = true # set to `true` to enforce the constraint that the
                                 # first trait only loads onto the first factor
