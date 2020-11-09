@@ -151,9 +151,14 @@ function make_xml(run::XMLRun, vars::PipelineVariables, dir::String;
     lgo = ops[findfirst(x -> isa(x, XMLConstructor.HMCOperatorXMLElement), ops)]
     lgo.weight = Float64(3)
     if vars.constrain_loadings
-        error("not implemented")
-        sparsity_constraint = CONSTRAIN_LOADINGS ? "hybrid" : "none"
-        XMLConstructor.sparsity_constraint!(lgo, sparsity_constraint)
+        p = size(data, 2)
+        mask = zeros(p, k)
+        mask[2:end, 2:end] .= 1.0
+        lgo.mask = vec(mask)
+
+        lgo2 = XMLConstructor.LoadingsGibbsOperatorXMLElement(facs, like)
+        lgo2.sparsity = "firstRow"
+        push!(ops, lgo2)
     end
 
     if FIX_GLOBAL || FIX_FIRST
