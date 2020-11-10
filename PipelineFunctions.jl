@@ -1,6 +1,6 @@
 module PipelineFunctions
 
-export run_pipeline
+export run_pipeline, safe_mkdir
 
 using BeastUtils.XMLConstructor, BeastUtils.DataStorage, BeastUtils.MatrixUtils,
         BeastUtils.RunBeast, BeastUtils.Logs, BeastUtils.BeastNames
@@ -226,8 +226,14 @@ function remove_observations(data::Matrix{Float64}, sparsity::Float64;
 end
 
 function safe_mkdir(dir::String)
-    if !isdir(dir)
-        mkdir(dir)
+    paths = splitpath(dir)
+    n = length(paths)
+    path = ""
+    for i = 1:n
+        path = joinpath(path, paths[i])
+        if !isdir(path)
+            mkdir(path)
+        end
     end
 end
 
@@ -263,6 +269,7 @@ end
 
 
 function run_pipeline(vars::PipelineVariables)
+    old_dir = pwd()
     if (vars.julia_seed != -1)
         Random.seed!(vars.julia_seed)
     end
@@ -284,7 +291,9 @@ function run_pipeline(vars::PipelineVariables)
 
     ## plot results
 
-    plot_loadings(vars, best_model, svd_path)
+    k_effective = plot_loadings(vars, best_model, svd_path)
+    cd(old_dir)
+    return k_effective
 end
 
 function model_selection(vars::PipelineVariables, tree_data::TreeData)
@@ -432,6 +441,8 @@ end
 function plot_loadings(vars::PipelineVariables, final_run::XMLRun, svd_path::String)
     metadata_path = vars.labels_path
 
+    final_log = svd_path
+    k_effective = 0
 
     if vars.plot_loadings
 
@@ -443,7 +454,6 @@ function plot_loadings(vars::PipelineVariables, final_run::XMLRun, svd_path::Str
 
         nm = final_run.filename
         # final_log = nm * ".log"
-        final_log = svd_path
         csv_path = "$nm.csv"
         k_effective = process_log(vars, final_log, csv_path, vars.data_path,
                                   metadata_path)
@@ -471,7 +481,8 @@ function plot_loadings(vars::PipelineVariables, final_run::XMLRun, svd_path::Str
         rm(tmp_path)
     end
 
-    taxa, F = process_for_factors(final_log, final_run.filename * "_factors.txt");
+    taxa, F = process_for_factors(final_log, final_run.filename * "_factors.txt")
+    return k_effective
 end
 
 
