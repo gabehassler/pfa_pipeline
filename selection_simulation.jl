@@ -3,7 +3,6 @@ Random.seed!(666)
 
 # using JLD, BatchSetup
 
-using ImportVariables
 
 # function submit_pipeline(starting_dir::String, jld_path:String)
 #     cd(starting_dir)
