@@ -444,19 +444,21 @@ function plot_loadings(vars::PipelineVariables, final_run::XMLRun, svd_path::Str
     final_log = svd_path
     k_effective = 0
 
+
+    # cd(@__DIR__)
+    # nms = string.(names(CSV.read(data_path)))
+
+    labels_df = CSV.read(metadata_path)
+    cat_levs = unique(labels_df.cat)
+
+    nm = final_run.filename
+    # final_log = nm * ".log"
+    csv_path = "$nm.csv"
+    k_effective = process_log(vars, final_log, csv_path, vars.data_path,
+                                metadata_path)
+
     if vars.plot_loadings
 
-        # cd(@__DIR__)
-        # nms = string.(names(CSV.read(data_path)))
-
-        labels_df = CSV.read(metadata_path)
-        cat_levs = unique(labels_df.cat)
-
-        nm = final_run.filename
-        # final_log = nm * ".log"
-        csv_path = "$nm.csv"
-        k_effective = process_log(vars, final_log, csv_path, vars.data_path,
-                                  metadata_path)
         # display([nms pretty_names categories])
         @rput csv_path
         plot_path = "$nm.pdf"
@@ -585,9 +587,6 @@ function process_log(vars::PipelineVariables, log_path::String,
             last_row = i
         end
     end
-
-    @show row_counts
-    @show last_row
 
     keep_rows = 1:last_row
 
