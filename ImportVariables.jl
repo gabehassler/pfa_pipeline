@@ -11,8 +11,10 @@ mutable struct PipelineVariables
 
     make_selection_xml::Bool
     run_selection_xml::Bool
+    process_selection_logs::Bool
     make_final_xml::Bool
     run_final_xml::Bool
+    compute_k::Bool
     plot_loadings::Bool
 
     overwrite::Bool
@@ -50,8 +52,10 @@ function import_variables(path::String)
                             joinpath(DATA_DIR, labels_filename),
                             MAKE_SELECTION_XML,
                             RUN_SELECTION_XML,
+                            RUN_SELECTION_XML,
                             MAKE_FINAL_XML,
                             RUN_FINAL_XML,
+                            PLOT_LOADINGS,
                             PLOT_LOADINGS,
                             OVERWRITE,
                             BEAST_HOME,

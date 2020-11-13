@@ -14,8 +14,9 @@ Random.seed!(666)
 ################################################################################
 
 
-const OVERWRITE = true
-const BATCH = false
+const OVERWRITE = false
+const BATCH = true
+
 
 const JLD_NAME = "vars.jld"
 
@@ -35,20 +36,23 @@ using Simulations
 
 
 
-ks = [2]
-ps = [10]
-ns = [100]
-n_sims = 1
-sim_name = "sim2"
+ks = [1, 2, 4, 8]
+ps = [20]
+ns = [50, 100, 200]
+n_sims = 2
+sim_name = "sim_bigger"
+status = check_status(joinpath(Simulations.SIM_DIRECTORY, sim_name), batch = BATCH)
 
-this_dir = simulate_data(sim_name, ns, ks, ps, n_sims, overwrite = OVERWRITE)
+this_dir = simulate_data(sim_name, ns, ks, ps, n_sims, overwrite = OVERWRITE,
+                         status = status)
+
 
 
 ################################################################################
 ## Model selection under different selection statistics
 ################################################################################
 
-vars_dict = run_sim_pipelines(this_dir)
+vars_dict = run_sim_pipelines(this_dir; status = status)
 
 
 
@@ -56,4 +60,7 @@ vars_dict = run_sim_pipelines(this_dir)
 ## Evaluate performance of selection statistics
 ################################################################################
 
-df = process_simulations(this_dir, vars_dict, sim_name)
+if status != Simulations.MAKE_XML
+
+    df = process_simulations(this_dir, vars_dict, sim_name)
+end

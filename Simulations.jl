@@ -1,10 +1,11 @@
 module Simulations
 
-export simulate_data, run_sim_pipelines, process_simulations
+export simulate_data, run_sim_pipelines, process_simulations,
+       check_status
 
 using Distributions, LinearAlgebra, PhyloNetworks, DataFrames, CSV
 using BeastUtils.Simulation, BeastUtils.TreeUtils, BeastUtils.DataStorage
-using PipelineFunctions, ImportVariables
+using PipelineFunctions, ImportVariables, BatchSetup
 
 const INSTRUCTIONS = joinpath(@__DIR__, "sim_selection.csv")
 const SIM_DIRECTORY = joinpath(@__DIR__, "simulations")
@@ -13,14 +14,20 @@ const NEWICK_NAME = "newick.txt"
 const METADATA_NAME = "metadata.csv"
 const STATS = ["MSE", "LPD"]
 const BATCH = false
+const BATCH_DIR = joinpath(@__DIR__, "batch")
+
+const ALL = 0
+const MAKE_XML = 1
+const PROCESS_LOGS = 2
+const DONE = 3
 
 
 beast_path = joinpath(@__DIR__, "beast.jar")
 beast_sle = 100
-final_chain_length = 1000
+final_chain_length = 10000
 final_file_freq = 10
 
-repeats = 1
+repeats = 2
 
 sparsity = 0.1
 selection_burnin = 0.5
@@ -33,12 +40,86 @@ beast_seed = 666
 
 constrain_loadings = false
 
+function make_batch(this_dir::String)
+    bis = BatchInfo[]
+
+    for dir in readdir(this_dir, join = true)
+        if isdir(dir)
+            for stat in STATS
+                dirs = ["\$HOME", "pfa_pipeline", "simulations",
+                        splitpath(this_dir)[end],
+                        splitpath(dir)[end],
+                        stat,
+                        "selection"]
+
+                xml_dir = join([dirs; "xml"], "/")
+                logs_dir = join([dirs; "logs"], "/")
+                for xml in readdir(joinpath(this_dir, dir, stat, "selection", "xml"))
+                    nm = string(split(xml, '.')[1])
+                    bi = BatchInfo(nm)
+                    bi.name = splitpath(dir)[end] * "_" * bi.name
+                    bi.run_time = "4:00:00"
+                    bi.source_dir = xml_dir
+                    bi.dest_dir = logs_dir
+                    bi.email = false
+                    bi.tmp_dir = true
+
+                    push!(bis, bi)
+                end
+            end
+        end
+    end
+
+    setup_sh(this_dir, bis)
+end
+
+function check_status(this_dir::String; batch::Bool = false)
+
+    if !isdir(this_dir) || isempty(this_dir)
+        if batch
+            return MAKE_XML
+        else
+            return ALL
+        end
+    end
+
+    for dir in readdir(this_dir, join = true)
+        if isdir(dir)
+            dir_name = splitpath(dir)[end]
+            if isfile(joinpath(dir, "$dir_name.log"))
+                return DONE
+            end
+
+            for stat in STATS
+                stat_dir = joinpath(this_dir, dir, stat, "selection")
+                xml_dir = joinpath(stat_dir, "xml")
+                logs_dir = joinpath(stat_dir, "logs")
+
+                if !isdir(xml_dir) || isempty(xml_dir)
+                    if batch
+                        return MAKE_XML
+                    else
+                        return ALL
+                    end
+                end
+
+                if isdir(logs_dir) && !isempty(logs_dir)
+                    return PROCESS_LOGS
+                end
+            end
+        end
+    end
+
+    return DONE
+end
 
 
 function parse_initial(file::AbstractString, base_name::String)
     reg_string = "$(base_name)_n(\\d+)_k(\\d+)_p(\\d+)_s.*"
     regex = Regex(reg_string)
     m = match(regex, file)
+
+    @show file
 
     return parse(Int, m.captures[1]),
            parse(Int, m.captures[2]),
@@ -58,18 +139,24 @@ function simulate_data(sim_name::String,
                         shrinkage_scale::Float64 = 2.0,
                         res_shape::Float64 = 2.0,
                         res_scale::Float64 = 1.0,
-                        overwrite::Bool = false)
+                        overwrite::Bool = false,
+                        status::Int = ALL)
 
     λ_dist = Gamma(res_shape, res_scale)
     mults_dist = Gamma(shrinkage_shape, shrinkage_scale)
 
     this_dir = joinpath(SIM_DIRECTORY, sim_name)
+    mkpath(this_dir)
 
-    if !overwrite && isdir(this_dir) && !isempty(this_dir)
+
+    if !(status == ALL || status == DONE || status == MAKE_XML)
+        return this_dir
+    end
+
+    if !overwrite && isdir(this_dir) && !(length(readdir(this_dir)) == 0)
         error("Directory $this_dir is not empty. Set OVERWRITE=true to overwrite.")
     end
 
-    mkpath(this_dir)
 
     for file in readdir(this_dir)
         rm(joinpath(this_dir, file), recursive=true)
@@ -124,63 +211,79 @@ end
 
 
 
-function run_sim_pipelines(this_dir::String)
+function run_sim_pipelines(this_dir::String; status::Int = NONE)
     old_dir = pwd()
     vars_dict = Dict{String, Dict{String, PipelineVariables}}()
-    for dir in readdir(this_dir)
-        data_path = joinpath(this_dir, dir, DATA_NAME)
-        newick_path = joinpath(this_dir, dir, NEWICK_NAME)
-        metadata_path = joinpath(this_dir, dir, METADATA_NAME)
-        cd(joinpath(this_dir, dir))
 
-        vars_dict[dir] = Dict{String, PipelineVariables}()
+    make_selection = true
+    run_selection = true
+    process_logs = true
+    do_final = true
 
-        for stat in STATS
-
-            vars = PipelineVariables(stat,
-                                    data_path,
-                                    newick_path,
-                                    INSTRUCTIONS,
-                                    metadata_path,
-                                    true,
-                                    true,
-                                    true,
-                                    true,
-                                    false,
-                                    true,
-                                    beast_path,
-                                    beast_sle,
-                                    final_chain_length,
-                                    final_file_freq,
-                                    repeats,
-                                    sparsity,
-                                    selection_burnin,
-                                    stat,
-                                    keep_threshold,
-                                    plot_burnin,
-                                    julia_seed,
-                                    beast_seed,
-                                    constrain_loadings,
-                                    false
-                                    )
-            vars_dict[dir][stat] = vars
-            if BATCH
-                # stat_dir = joinpath(this_dir, dir, stat)
-                # mkdir(stat_dir)
-                # jld_path = joinpath(stat_dir, JLD_NAME)
-                # save(jld_path, "vars", vars)
+    if status == MAKE_XML
+        make_selection = true
+        run_selection = false
+        process_logs = false
+        do_final = false
+    elseif status == PROCESS_LOGS
+        make_selection = false
+        run_selection = false
+        process_logs = true
+        do_final = true
+    end
 
 
 
-                # run(`julia `)
+    for dir in readdir(this_dir, join = true)
+        if isdir(dir)
+            data_path = joinpath(dir, DATA_NAME)
+            newick_path = joinpath(dir, NEWICK_NAME)
+            metadata_path = joinpath(dir, METADATA_NAME)
+            cd(dir)
 
-                error("not implemented")
+            vars_dict[dir] = Dict{String, PipelineVariables}()
 
-            else
+            for stat in STATS
+
+                vars = PipelineVariables(stat,
+                                        data_path,
+                                        newick_path,
+                                        INSTRUCTIONS,
+                                        metadata_path,
+                                        make_selection,
+                                        run_selection,
+                                        process_logs,
+                                        do_final,
+                                        do_final,
+                                        false,
+                                        false,
+                                        true,
+                                        beast_path,
+                                        beast_sle,
+                                        final_chain_length,
+                                        final_file_freq,
+                                        repeats,
+                                        sparsity,
+                                        selection_burnin,
+                                        stat,
+                                        keep_threshold,
+                                        plot_burnin,
+                                        julia_seed,
+                                        beast_seed,
+                                        constrain_loadings,
+                                        false
+                                        )
+                vars_dict[dir][stat] = vars
+
                 run_pipeline(vars)
             end
         end
     end
+
+    if status == MAKE_XML
+        make_batch(this_dir)
+    end
+
     cd(old_dir)
     return vars_dict
 end
@@ -188,35 +291,39 @@ end
 function process_simulations(this_dir::String,
                     vars_dict::Dict{String, Dict{String, PipelineVariables}},
                     sim_name::String)
-    n_sims = length(readdir(this_dir))
+    n_sims = count(isdir(dir) for dir in readdir(this_dir, join = true))
     df = DataFrame([String, Int, Int, Int, Int], ["stat", "n", "k", "p", "k_inferred"], n_sims * length(STATS))
 
 
     ind = 1
 
-    for dir in readdir(this_dir)
-        (n, k, p) = parse_initial(dir, sim_name)
-        for stat in STATS
-            cd(joinpath(this_dir, dir))
+    for dir in readdir(this_dir, join = true)
+        if isdir(dir)
+            (n, k, p) = parse_initial(dir, sim_name)
+            for stat in STATS
+                cd(dir)
 
-            vars = vars_dict[dir][stat]
-            vars.make_selection_xml = false
-            vars.run_selection_xml = false
-            vars.make_final_xml = false
-            vars.run_final_xml = false
+                vars = vars_dict[dir][stat]
+                vars.make_selection_xml = false
+                vars.run_selection_xml = false
+                vars.make_final_xml = false
+                vars.run_final_xml = false
+                vars.compute_k = true
 
-            k_effective = run_pipeline(vars)
+                k_effective = run_pipeline(vars)
 
-            df.stat[ind] = stat
-            df.n[ind] = n
-            df.k[ind] = k
-            df.p[ind] = p
-            df.k_inferred[ind] = k_effective
-            ind += 1
+                df.stat[ind] = stat
+                df.n[ind] = n
+                df.k[ind] = k
+                df.p[ind] = p
+                df.k_inferred[ind] = k_effective
+                ind += 1
+            end
         end
     end
 
     CSV.write(joinpath(this_dir, "results.csv"), df)
+    return df
 end
 
 end

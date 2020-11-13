@@ -286,13 +286,21 @@ function run_pipeline(vars::PipelineVariables)
     ## model selection
     best_model = model_selection(vars, td)
 
-    ## final run
-    svd_path = run_final_xml(vars, best_model, data)
+    k_effective = nothing
 
-    ## plot results
+    if vars.make_final_xml || vars.run_final_xml || vars.plot_loadings || vars.compute_k
 
-    k_effective = plot_loadings(vars, best_model, svd_path)
+        ## final run
+        svd_path = run_final_xml(vars, best_model, data)
+
+        ## plot results
+
+        k_effective = plot_loadings(vars, best_model, svd_path)
+        @show k_effective
+    end
+
     cd(old_dir)
+    @show k_effective
     return k_effective
 end
 
@@ -366,34 +374,43 @@ function model_selection(vars::PipelineVariables, tree_data::TreeData)
 
     statistic_path = joinpath(select_dir, vars.selection_statistic * ".csv")
 
-    if vars.run_selection_xml
-        nms = [Symbol("run$i") for i = 1:vars.repeats]
-        statistic_df = DataFrame(zeros(n_opts, vars.repeats), nms)
-        safe_csvwrite(statistic_path, statistic_df, overwrite = vars.overwrite)
-        for j = 1:vars.repeats
-            for i = 1:n_opts
-                run = xmlruns[i, j]
-                xml_path = joinpath(select_xml_dir, "$(run.filename).xml")
-                RunBeast.run_beast(xml_path, seed = vars.beast_seed,
-                                   overwrite = vars.overwrite,
-                                   beast_jar = vars.beast_path)
-                log_name = "$(run.filename).log"
+    nms = [Symbol("run$i") for i = 1:vars.repeats]
+    statistic_df = DataFrame(zeros(n_opts, vars.repeats), nms)
+    # safe_csvwrite(statistic_path, statistic_df, overwrite = vars.overwrite)
+    for j = 1:vars.repeats
+        for i = 1:n_opts
+            run = xmlruns[i, j]
+            xml_path = joinpath(select_xml_dir, "$(run.filename).xml")
+            log_name = "$(run.filename).log"
+            log_path = joinpath(select_log_dir, "$(run.filename).log")
 
-                col, log_data = Logs.get_log_match(log_name,
+            if vars.run_selection_xml
+
+
+                RunBeast.run_beast(xml_path, seed = vars.beast_seed,
+                                overwrite = vars.overwrite,
+                                beast_jar = vars.beast_path)
+                mv(log_name, log_path, force = vars.overwrite)
+            end
+
+            if vars.process_selection_logs
+                col, log_data = Logs.get_log_match(log_path,
                                         label_dict[vars.selection_statistic],
                                         burnin = vars.selection_burnin)
                 @assert length(col) == 1
                 statistic_df[i, j] = mean(log_data)
                 safe_csvwrite(statistic_path, statistic_df, overwrite = true)
-
-                mv(log_name,
-                    joinpath(select_log_dir, "$(run.filename).log"),
-                    force = vars.overwrite)
             end
+
+
         end
     end
 
     ## Figure out which model is best
+    if !isfile(statistic_path)
+        @show statistic_path
+        return -1
+    end
     lpds = Matrix{Float64}(CSV.read(statistic_path))
     best_ind = findmax(vec(mult_dict[vars.selection_statistic] *
                                                     mean(lpds, dims = 2)))[2]
