@@ -37,6 +37,7 @@ mutable struct PipelineVariables
     beast_seed::Int
 
     constrain_loadings::Bool
+    shrink::Bool
 
     batch::Bool
 end
@@ -71,6 +72,7 @@ function import_variables(path::String)
                             JULIA_SEED,
                             BEAST_SEED,
                             CONSTRAIN_LOADINGS,
+                            SHRINK_LOADINGS,
                             false
                             )
 end

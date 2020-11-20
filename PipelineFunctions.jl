@@ -128,11 +128,21 @@ function make_xml(run::XMLRun, vars::PipelineVariables, dir::String;
     shapes[1] = BASE_SHAPE
     scales = fill(mult_scale, k)
 
-    bx = XMLConstructor.make_orthogonal_pfa_xml(data, taxa, newick, k,
-                                     chain_length = chain_length,
-                                     sle = vars.beast_sle,
-                                     fle = fle,
-                                     log_factors = log_factors)
+    if shrink
+
+        bx = XMLConstructor.make_orthogonal_pfa_xml(data, taxa, newick, k,
+                                        chain_length = chain_length,
+                                        sle = vars.beast_sle,
+                                        fle = fle,
+                                        log_factors = log_factors)
+    else
+        bx = XMLConstructor.make_pfa_xml(data, taxa, newick, k,
+                                        chain_length = chain_length,
+                                        sle = vars.beast_sle,
+                                        fle = fle,
+                                        log_factors = log_factors,
+                                        useHMC = false)
+    end
 
 
     mbd = XMLConstructor.get_mbd(bx)
@@ -152,17 +162,22 @@ function make_xml(run::XMLRun, vars::PipelineVariables, dir::String;
 
     ops = XMLConstructor.get_operators(bx)
 
-    lgo = ops[findfirst(x -> isa(x, XMLConstructor.HMCOperatorXMLElement), ops)]
-    lgo.weight = Float64(3)
-    if vars.constrain_loadings
-        p = size(data, 2)
-        mask = zeros(p, k)
-        mask[2:end, 2:end] .= 1.0
-        lgo.mask = vec(mask)
+    lgo = XMLConstructor.get_loadings_op(bx)
+    lgo.weight = 3.0
 
-        lgo2 = XMLConstructor.LoadingsGibbsOperatorXMLElement(facs, like)
-        lgo2.sparsity = "firstRow"
-        push!(ops, lgo2)
+    if vars.constrain_loadings
+        if shrink
+            p = size(data, 2)
+            mask = zeros(p, k)
+            mask[2:end, 2:end] .= 1.0
+            lgo.mask = vec(mask)
+
+            lgo2 = XMLConstructor.LoadingsGibbsOperatorXMLElement(facs, like)
+            lgo2.sparsity = "firstRow"
+            push!(ops, lgo2)
+        else
+            lgo.sparsity = "hybrid"
+        end
     end
 
     if FIX_GLOBAL || FIX_FIRST
@@ -338,7 +353,7 @@ function model_selection(vars::PipelineVariables, tree_data::TreeData)
             run = xmlruns[i, j]
             run.k = k_max
             run.L_init = default_loadings(k_max, tree_data.P)
-            run.shrink = true
+            run.shrink = vars.shrink
             run.shape_multiplier = shape
             run.scale_multiplier = scale
             run.rep = j
@@ -448,7 +463,7 @@ function run_final_xml(vars::PipelineVariables, final_run::XMLRun, data::Matrix{
 
     SpecialSVDProcessing.svd_logs("$fn.log", svd_path, final_run.k, size(data, 2),
                                   rotate_factors = true,
-                                  do_svd = false,
+                                  do_svd = !vars.shrink,
                                   relevant_rows = collect(start_ind:final_run.k),
                                   relevant_cols = collect(start_ind:size(data, 2)))
 
