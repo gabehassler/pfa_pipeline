@@ -601,7 +601,8 @@ function process_log(vars::PipelineVariables, log_path::String,
             @assert L_cols[col] == "$L_header$i$(j)"
             vals = @view(L_data[:, col])
             n_pos = count(x -> x > 0.0, vals)
-            if n_pos > upper_threshold || n_pos < lower_threshold
+            n_neg = count(x -> x < 0.0, vals)
+            if n_pos > upper_threshold || n_neg > upper_threshold
                 L[i, perm[j]] = mean(@view L_data[:, col])
             end
         end
