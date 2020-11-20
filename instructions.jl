@@ -53,8 +53,8 @@ PLOT_BURNIN = 0.5 # burnin for loadings plot
 
 
 ## Random number seeds
-JULIA_SEED = 666 # random number seed for Julia (set to -1 for a random seed)
-BEAST_SEED = 666 # the number of the BEAST (set to -1 for a random seed)
+JULIA_SEED = -1 # random number seed for Julia (set to -1 for a random seed)
+BEAST_SEED = -1 # the number of the BEAST (set to -1 for a random seed)
 
 
 ## General modeling choices
