@@ -24,7 +24,7 @@ const DONE = 3
 
 beast_path = joinpath(@__DIR__, "beast.jar")
 beast_sle = 100
-final_chain_length = 10000
+final_chain_length = 100
 final_file_freq = 10
 
 repeats = 1
@@ -78,7 +78,7 @@ function check_status(this_dir::String; batch::Bool = false)
     status = DONE
 
     if !isdir(this_dir) || isempty(this_dir)
-        status = MAKE_XML
+        return batch ? MAKE_XML : ALL
     end
 
     for dir in readdir(this_dir, join = true)
@@ -248,7 +248,7 @@ end
 
 function run_sim_pipelines(this_dir::String; status::Int = NONE)
     old_dir = pwd()
-    vars_dict = Dict{String, Dict{String, PipelineVariables}}()
+    vars_dict = Dict{String, PipelineVariables}()
 
     make_selection = true
     run_selection = true
@@ -276,43 +276,38 @@ function run_sim_pipelines(this_dir::String; status::Int = NONE)
             metadata_path = joinpath(dir, METADATA_NAME)
             cd(dir)
 
-            vars_dict[dir] = Dict{String, PipelineVariables}()
+            vars = PipelineVariables("X",
+                                    data_path,
+                                    newick_path,
+                                    INSTRUCTIONS,
+                                    metadata_path,
+                                    make_selection,
+                                    run_selection,
+                                    process_logs,
+                                    do_final,
+                                    do_final,
+                                    false,
+                                    false,
+                                    true,
+                                    beast_path,
+                                    beast_sle,
+                                    final_chain_length,
+                                    final_file_freq,
+                                    repeats,
+                                    sparsity,
+                                    selection_burnin,
+                                    STATS,
+                                    keep_threshold,
+                                    plot_burnin,
+                                    julia_seed,
+                                    beast_seed,
+                                    constrain_loadings,
+                                    true,
+                                    false
+                                    )
+            vars_dict[dir] = vars
 
-            for stat in STATS
-
-                vars = PipelineVariables(stat,
-                                        data_path,
-                                        newick_path,
-                                        INSTRUCTIONS,
-                                        metadata_path,
-                                        make_selection,
-                                        run_selection,
-                                        process_logs,
-                                        do_final,
-                                        do_final,
-                                        false,
-                                        false,
-                                        true,
-                                        beast_path,
-                                        beast_sle,
-                                        final_chain_length,
-                                        final_file_freq,
-                                        repeats,
-                                        sparsity,
-                                        selection_burnin,
-                                        stat,
-                                        keep_threshold,
-                                        plot_burnin,
-                                        julia_seed,
-                                        beast_seed,
-                                        constrain_loadings,
-                                        true,
-                                        false
-                                        )
-                vars_dict[dir][stat] = vars
-
-                run_pipeline(vars)
-            end
+            run_pipeline(vars)
         end
     end
 
@@ -325,7 +320,7 @@ function run_sim_pipelines(this_dir::String; status::Int = NONE)
 end
 
 function process_simulations(this_dir::String,
-                    vars_dict::Dict{String, Dict{String, PipelineVariables}},
+                    vars_dict::Dict{String, PipelineVariables},
                     sim_name::String)
     n_sims = count(isdir(dir) for dir in readdir(this_dir, join = true))
     df = DataFrame([String, Int, Int, Int, Int], ["stat", "n", "k", "p", "k_inferred"], n_sims * length(STATS))
@@ -333,28 +328,34 @@ function process_simulations(this_dir::String,
 
     ind = 1
 
+    @show keys(vars_dict)
+
     for dir in readdir(this_dir, join = true)
         if isdir(dir)
             (n, k, p) = parse_initial(dir, sim_name)
-            for stat in STATS
-                cd(dir)
+            cd(dir)
 
-                vars = vars_dict[dir][stat]
-                vars.make_selection_xml = false
-                vars.run_selection_xml = false
-                vars.make_final_xml = false
-                vars.run_final_xml = false
-                vars.compute_k = true
+            vars = vars_dict[dir]
+            vars.make_selection_xml = false
+            vars.run_selection_xml = false
+            vars.make_final_xml = false
+            vars.run_final_xml = false
+            vars.compute_k = true
 
-                k_effective = run_pipeline(vars)
+            eff_ks = run_pipeline(vars)
 
-                df.stat[ind] = stat
-                df.n[ind] = n
-                df.k[ind] = k
-                df.p[ind] = p
-                df.k_inferred[ind] = k_effective
-                ind += 1
+            n_stats = length(STATS)
+            rng = ind:(ind + n_stats - 1)
+
+            for i = 1:length(rng)
+                df.stat[rng[i]] = STATS[i]
+                df.k_inferred[rng[i]] = eff_ks[i]
             end
+
+            df.n[rng] .= n
+            df.k[rng] .= k
+            df.p[rng] .= p
+            ind += n_stats
         end
     end
 

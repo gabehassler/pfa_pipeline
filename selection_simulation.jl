@@ -37,11 +37,11 @@ using Simulations
 
 
 
-ks = [4]
+ks = [2, 4]
 ps = [80]
-ns = [200]
-n_sims = 1
-sim_name = "test_diff"
+ns = [150]
+n_sims = 2
+sim_name = "diff3"
 status = check_status(joinpath(Simulations.SIM_DIRECTORY, sim_name), batch = BATCH)
 
 this_dir = simulate_data(sim_name, ns, ks, ps, n_sims, overwrite = OVERWRITE,

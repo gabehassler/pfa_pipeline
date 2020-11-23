@@ -26,8 +26,11 @@ const MSE_STAT = "MSE"
 const LPD_COND = "CLPD"
 const LPD_MARG = "MLPD"
 const NO_STAT = ""
+const JOINT = "joint"
+const REMOVED = "removed"
 const partition_dict = Dict(LPD_MARG => true, LPD_COND => false, MSE_STAT => false)
-const label_dict = Dict(LPD_MARG => "removed.", LPD_COND => "removed.", MSE_STAT => "traitValidation.TotalSum")
+const trait_dict = Dict(LPD_MARG => REMOVED, LPD_COND => JOINT, MSE_STAT => JOINT)
+const label_dict = Dict(LPD_MARG => "$(trait_dict[LPD_MARG]).", LPD_COND => "$(trait_dict[LPD_COND]).", MSE_STAT => "traitValidation.TotalSum")
 const mult_dict = Dict(LPD_MARG => 1, LPD_COND => 1, MSE_STAT => -1)
 
 
@@ -37,6 +40,7 @@ mutable struct XMLRun
     taxa::Vector{String}
     data::Matrix{Float64}
     missing_data::Union{Nothing, Matrix{Float64}}
+    joint_data::Matrix{Float64}
     k::Int
     shrink::Bool
     shape_multiplier::Float64
@@ -47,7 +51,7 @@ mutable struct XMLRun
     chain_length::Int
     file_freq::Int
     L_init::Matrix{Float64}
-    selection_stat::String
+    selection_stats::Vector{String}
 end
 
 function XMLRun(name::String, newick::String, taxa::Vector{String}, data::Matrix{Float64})
@@ -61,8 +65,8 @@ function XMLRun(name::String, newick::String, taxa::Vector{String}, data::Matrix
         error("The length of the taxa vector must equal the number of rows " *
                 "in the data matrix.")
     end
-    return XMLRun(newick, taxa, data, nothing, k, false, NaN, NaN,
-                  0, name, "", 100, 10, default_loadings(k, p), MSE_STAT)
+    return XMLRun(newick, taxa, data, nothing, data, k, false, NaN, NaN,
+                  0, name, "", 100, 10, default_loadings(k, p), [MSE_STAT])
 end
 
 function default_loadings(k::Int, p::Int)
@@ -75,10 +79,12 @@ end
 
 import Base.copy
 function Base.copy(run::XMLRun)
-    return XMLRun(run.newick, run.taxa, run.data, run.missing_data, run.k,
+    return XMLRun(run.newick, run.taxa, run.data, run.missing_data,
+                    run.joint_data,
+                    run.k,
                     run.shrink, run.shape_multiplier, run.scale_multiplier,
                     run.rep, run.base_name, run.filename, run.chain_length,
-                    run.file_freq, run.L_init, run.selection_stat)
+                    run.file_freq, run.L_init, run.selection_stats)
 end
 
 function name_run!(run::XMLRun)
@@ -124,7 +130,7 @@ function make_xml(run::XMLRun, vars::PipelineVariables, dir::String;
     L_init = run.L_init
     mult_shape = run.shape_multiplier
     mult_scale = run.scale_multiplier
-    selection_stat = run.selection_stat
+    selection_stats = run.selection_stats
 
     shapes = fill(mult_shape, k)
     shapes[1] = BASE_SHAPE
@@ -158,8 +164,27 @@ function make_xml(run::XMLRun, vars::PipelineVariables, dir::String;
     end
     like = XMLConstructor.get_traitLikelihood(bx)
 
+    ind_dict = Dict{String, Int}()
+
     if !isnothing(removed_data)
-        XMLConstructor.add_trait!(bx, removed_data, "removed")
+        nms = String[]
+        stat_ind = 2
+        for i = 1:length(selection_stats)
+            stat = selection_stats[i]
+            trait_name = trait_dict[stat]
+            if !(trait_name in nms)
+                if trait_name == JOINT
+                    XMLConstructor.add_trait!(bx, run.joint_data, trait_name)
+                elseif trait_name == REMOVED
+                    XMLConstructor.add_trait!(bx, removed_data, trait_name)
+                else
+                    error("unknown trait name")
+                end
+
+                ind_dict[trait_name] = stat_ind
+                stat_ind += 1
+            end
+        end
     end
 
     ops = XMLConstructor.get_operators(bx)
@@ -195,26 +220,32 @@ function make_xml(run::XMLRun, vars::PipelineVariables, dir::String;
     # end
 
 
-    if !isnothing(removed_data) && selection_stat != NO_STAT
-        if selection_stat == LPD_COND || selection_stat == LPD_MARG
-            flpd = XMLConstructor.FactorLogPredictiveDensity(facs, like)
-            XMLConstructor.add_loggable(bx, flpd, already_made = false)
-        elseif selection_stat == MSE_STAT
-            tree_model = XMLConstructor.get_treeModel(bx)
+    if !isnothing(removed_data) && selection_stats != [NO_STAT]
 
-            trait_validation =
-                XMLConstructor.TraitValidationXMLElement(tree_model, like)
+        for stat in selection_stats
 
-            cross_validation =
-                XMLConstructor.CrossValidationXMLElement(trait_validation)
+            if stat == LPD_COND || stat == LPD_MARG
+                flpd = XMLConstructor.FactorLogPredictiveDensity(facs, like, trait_ind = ind_dict[trait_dict[stat]])
+                XMLConstructor.add_loggable(bx, flpd, already_made = false)
+            elseif stat == MSE_STAT
+                tree_model = XMLConstructor.get_treeModel(bx)
 
-            XMLConstructor.set_validation_type!(cross_validation,
-                                                BeastNames.SQUARED_ERROR)
+                trait_validation =
+                    XMLConstructor.TraitValidationXMLElement(tree_model, like)
 
-            XMLConstructor.set_log_sum!(cross_validation, true)
+                cross_validation =
+                    XMLConstructor.CrossValidationXMLElement(trait_validation)
 
-            XMLConstructor.add_loggable(bx, cross_validation,
-                                        already_made=false)
+                XMLConstructor.set_validation_type!(cross_validation,
+                                                    BeastNames.SQUARED_ERROR)
+
+                XMLConstructor.set_log_sum!(cross_validation, true)
+
+                XMLConstructor.add_loggable(bx, cross_validation,
+                                            already_made=false)
+            else
+                error("unknown statistic")
+            end
         end
     end
     path = joinpath(dir, run.filename * ".xml")
@@ -301,24 +332,40 @@ function run_pipeline(vars::PipelineVariables)
     td = TreeData(newick, taxa, data)
 
     ## model selection
-    best_model = model_selection(vars, td)
+    best_models = model_selection(vars, td)
 
-    k_effective = nothing
+    eff_ks = nothing
 
     if vars.make_final_xml || vars.run_final_xml || vars.plot_loadings || vars.compute_k
 
         ## final run
-        svd_path = run_final_xml(vars, best_model, data)
+        n_models = length(best_models)
+        svd_paths = Vector{String}(undef, n_models)
+
+        if n_models == 1
+            nms = [vars.name]
+        else
+            nms = [vars.name * stat for stat in vars.selection_statistics]
+        end
+        for i = 1:n_models
+            svd_paths[i] = run_final_xml(vars, best_models[i], data, name = nms[i])
+        end
+
 
         ## plot results
+        eff_ks = fill(-1, n_models)
+        for i = 1:n_models
+            eff_ks[i] = plot_loadings(vars, best_models[i], svd_paths[i])
+        end
 
-        k_effective = plot_loadings(vars, best_model, svd_path)
-        @show k_effective
+        if length(eff_ks) == 1
+            eff_ks = fill(eff_ks[1], length(vars.selection_statistics))
+        end
+        @show eff_ks
     end
 
     cd(old_dir)
-    @show k_effective
-    return k_effective
+    return eff_ks
 end
 
 function model_selection(vars::PipelineVariables, tree_data::TreeData)
@@ -361,7 +408,7 @@ function model_selection(vars::PipelineVariables, tree_data::TreeData)
             run.rep = j
             run.chain_length = chain_length
             run.file_freq = fle
-            run.selection_stat = vars.selection_statistic
+            run.selection_stats = vars.selection_statistics
 
             name_run!(run)
         end
@@ -372,12 +419,13 @@ function model_selection(vars::PipelineVariables, tree_data::TreeData)
             observed_data, missing_data =
                     remove_observations(selection_data,
                             vars.sparsity,
-                            partition = partition_dict[vars.selection_statistic])
+                            partition = true)
 
             for i = 1:n_opts
                 run = xmlruns[i, j]
                 run.data = observed_data
                 run.missing_data = missing_data
+                run.joint_data = selection_data
             end
 
         end
@@ -389,10 +437,12 @@ function model_selection(vars::PipelineVariables, tree_data::TreeData)
 
     ## Run selection xml and store statistics
 
-    statistic_path = joinpath(select_dir, vars.selection_statistic * ".csv")
+    statistic_paths = [joinpath(select_dir, stat * ".csv")
+                            for stat in vars.selection_statistics]
 
     nms = [Symbol("run$i") for i = 1:vars.repeats]
-    statistic_df = DataFrame(zeros(n_opts, vars.repeats), nms)
+    statistic_dfs = Dict(stat => DataFrame(zeros(n_opts, vars.repeats), nms)
+                                for stat in vars.selection_statistics)
     # safe_csvwrite(statistic_path, statistic_df, overwrite = vars.overwrite)
     for j = 1:vars.repeats
         for i = 1:n_opts
@@ -411,45 +461,59 @@ function model_selection(vars::PipelineVariables, tree_data::TreeData)
             end
 
             if vars.process_selection_logs
-                col, log_data = Logs.get_log_match(log_path,
-                                        label_dict[vars.selection_statistic],
-                                        burnin = vars.selection_burnin)
+                for stat_ind = 1:length(vars.selection_statistics)
+                    stat = vars.selection_statistics[stat_ind]
+                    col, log_data = Logs.get_log_match(log_path,
+                                            label_dict[stat],
+                                            burnin = vars.selection_burnin)
 
-                if vars.selection_statistic == LPD_COND
-                    col, like_data = Logs.get_log_match(log_path,
-                                        "likelihood",
-                                        burnin = vars.selection_burnin)
-                    log_data .-= like_data
+                    if stat == LPD_COND
+                        col, like_data = Logs.get_log_match(log_path,
+                                            "likelihood",
+                                            burnin = vars.selection_burnin)
+                        log_data .-= like_data
+                    end
+
+                    statistic_dfs[stat][i, j] = mean(log_data)
+                    safe_csvwrite(statistic_paths[stat_ind], statistic_dfs[stat],
+                                  overwrite = true)
                 end
-
-                statistic_df[i, j] = mean(log_data)
-                safe_csvwrite(statistic_path, statistic_df, overwrite = true)
             end
 
 
         end
     end
 
-    ## Figure out which model is best
-    if !isfile(statistic_path)
-        @show statistic_path
-        return -1
-    end
-    lpds = Matrix{Float64}(CSV.read(statistic_path))
-    best_ind = findmax(vec(mult_dict[vars.selection_statistic] *
-                                                    mean(lpds, dims = 2)))[2]
-    display(lpds)
-    display(best_ind)
 
-    final_run = copy(xmlruns[best_ind, 1])
-    return final_run
+    ## Figure out which model is best
+
+    n_stats = length(vars.selection_statistics)
+
+    for path in statistic_paths
+        if !isfile(path)
+            return nothing
+        end
+    end
+
+
+    stat_means = [mean(Matrix{Float64}(CSV.read(path)), dims=2) for path in statistic_paths]
+    best_inds = [findmax(vec(mult_dict[vars.selection_statistics[i]] *
+                                        stat_means[i]))[2] for i = 1:n_stats]
+
+
+    if length(Set(best_inds)) == 1
+        best_inds = [best_inds[1]]
+    end
+
+    final_runs = [copy(xmlruns[ind, 1]) for ind in best_inds]
+    return final_runs
 end
 
-function run_final_xml(vars::PipelineVariables, final_run::XMLRun, data::Matrix{Float64})
+function run_final_xml(vars::PipelineVariables, final_run::XMLRun, data::Matrix{Float64}; name::String = vars.name)
     final_run.rep = 0
     final_run.data = data
     final_run.missing_data = nothing
-    final_run.filename = vars.name
+    final_run.filename = name
     final_run.chain_length = vars.final_chain_length
     final_run.file_freq = vars.final_file_freq
 

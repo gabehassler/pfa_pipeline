@@ -28,7 +28,7 @@ mutable struct PipelineVariables
     sparsity::Float64
     selection_burnin::Float64
 
-    selection_statistic::String
+    selection_statistics::Vector{String}
 
     keep_threshold::Float64
     plot_burnin::Float64
@@ -66,7 +66,7 @@ function import_variables(path::String)
                             REPEATS,
                             SPARSITY,
                             SELECTION_BURNIN,
-                            SELECTION_STATISTIC,
+                            [SELECTION_STATISTIC],
                             KEEP_THRESHOLD,
                             PLOT_BURNIN,
                             JULIA_SEED,
