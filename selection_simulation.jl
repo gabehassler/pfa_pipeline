@@ -14,8 +14,9 @@ Random.seed!(666)
 ################################################################################
 
 
-const OVERWRITE = false
-const BATCH = true
+const OVERWRITE = true
+const BATCH = false
+const SPARSE_LOADINGS = true
 
 
 const JLD_NAME = "vars.jld"
@@ -36,15 +37,15 @@ using Simulations
 
 
 
-ks = [1, 2, 4, 8]
-ps = [20]
-ns = [50, 100, 200]
-n_sims = 2
-sim_name = "sim_bigger"
+ks = [4]
+ps = [80]
+ns = [200]
+n_sims = 1
+sim_name = "test_diff"
 status = check_status(joinpath(Simulations.SIM_DIRECTORY, sim_name), batch = BATCH)
 
 this_dir = simulate_data(sim_name, ns, ks, ps, n_sims, overwrite = OVERWRITE,
-                         status = status)
+                         status = status, sparse_loadings = SPARSE_LOADINGS)
 
 
 

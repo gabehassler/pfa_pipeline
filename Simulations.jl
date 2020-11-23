@@ -12,7 +12,7 @@ const SIM_DIRECTORY = joinpath(@__DIR__, "simulations")
 const DATA_NAME = "data.csv"
 const NEWICK_NAME = "newick.txt"
 const METADATA_NAME = "metadata.csv"
-const STATS = ["MSE", "LPD"]
+const STATS = ["MLPD", "CLPD"]
 const BATCH = false
 const BATCH_DIR = joinpath(@__DIR__, "batch")
 
@@ -27,7 +27,7 @@ beast_sle = 100
 final_chain_length = 10000
 final_file_freq = 10
 
-repeats = 2
+repeats = 1
 
 sparsity = 0.1
 selection_burnin = 0.5
@@ -75,19 +75,17 @@ end
 
 function check_status(this_dir::String; batch::Bool = false)
 
+    status = DONE
+
     if !isdir(this_dir) || isempty(this_dir)
-        if batch
-            return MAKE_XML
-        else
-            return ALL
-        end
+        status = MAKE_XML
     end
 
     for dir in readdir(this_dir, join = true)
         if isdir(dir)
             dir_name = splitpath(dir)[end]
             if isfile(joinpath(dir, "$dir_name.log"))
-                return DONE
+                status = DONE
             end
 
             for stat in STATS
@@ -97,20 +95,26 @@ function check_status(this_dir::String; batch::Bool = false)
 
                 if !isdir(xml_dir) || isempty(xml_dir)
                     if batch
-                        return MAKE_XML
+                        status = MAKE_XML
                     else
-                        return ALL
+                        staus = ALL
                     end
                 end
 
                 if isdir(logs_dir) && !isempty(logs_dir)
-                    return PROCESS_LOGS
+                    status = PROCESS_LOGS
                 end
             end
         end
     end
 
-    return DONE
+    if !batch
+        if !(status == ALL || status == DONE)
+            status = ALL
+        end
+    end
+
+    return status
 end
 
 
@@ -132,6 +136,35 @@ function make_sim_name(name::String, n::Int, k::Int, p::Int, rep::Int)
 end
 
 
+function random_orthonormal(k::Int, p::Int;
+                         dense_dim::Int = k,
+                         sparse_count::Int = dense_dim + 1)
+
+    sparse_dim = k - dense_dim
+    L = zeros(k, p)
+    L[1:dense_dim, :] .= svd(randn(dense_dim, p)).Vt
+
+    total_sparse = sparse_count * sparse_dim
+    if total_sparse > sparse_dim * p
+        error("cannot create sparse orthogonal matrix with " *
+              "sparse_count=$sparse_count, dense_dim=$dense_dim, and p=$p.")
+    end
+
+    sparse_inds = sample(1:p, total_sparse, replace=false)
+    sparse_inds = reshape(sparse_inds, sparse_count, sparse_dim)
+
+    for i = 1:sparse_dim
+        cols = @view sparse_inds[:, i]
+        n = nullspace(L[1:dense_dim, cols])
+
+        L[i + dense_dim, cols] .= vec(n)
+    end
+
+    return L
+end
+
+
+
 function simulate_data(sim_name::String,
                         ns::Vector{Int}, ks::Vector{Int}, ps::Vector{Int},
                         n_sims::Int;
@@ -140,7 +173,8 @@ function simulate_data(sim_name::String,
                         res_shape::Float64 = 2.0,
                         res_scale::Float64 = 1.0,
                         overwrite::Bool = false,
-                        status::Int = ALL)
+                        status::Int = ALL,
+                        sparse_loadings::Bool = false)
 
     λ_dist = Gamma(res_shape, res_scale)
     mults_dist = Gamma(shrinkage_shape, shrinkage_scale)
@@ -168,7 +202,8 @@ function simulate_data(sim_name::String,
         for k in ks
             for p in ps
                 for i = 1:n_sims
-                    Vt = svd(randn(k, p)).Vt
+                    dense_dim = sparse_loadings ? div(k, 2) : p
+                    Vt = random_orthonormal(k, p, dense_dim=dense_dim)
                     λ = 1.0 ./ rand(λ_dist, p)
                     mults = rand(mults_dist, k)
                     precs = [prod(mults[1:i]) for i = 1:k]
@@ -271,6 +306,7 @@ function run_sim_pipelines(this_dir::String; status::Int = NONE)
                                         julia_seed,
                                         beast_seed,
                                         constrain_loadings,
+                                        true,
                                         false
                                         )
                 vars_dict[dir][stat] = vars

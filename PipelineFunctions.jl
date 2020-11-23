@@ -21,12 +21,14 @@ const FIX_GLOBAL = false
 const FIX_FIRST = false
 const BASE_SHAPE = 2.0
 
-const LPD_STAT = "LPD"
+# const LPD_STAT = "LPD"
 const MSE_STAT = "MSE"
+const LPD_COND = "CLPD"
+const LPD_MARG = "MLPD"
 const NO_STAT = ""
-const partition_dict = Dict(LPD_STAT => true, MSE_STAT => false)
-const label_dict = Dict(LPD_STAT => "removed.", MSE_STAT => "traitValidation.TotalSum")
-const mult_dict = Dict(LPD_STAT => 1, MSE_STAT => -1)
+const partition_dict = Dict(LPD_MARG => true, LPD_COND => false, MSE_STAT => false)
+const label_dict = Dict(LPD_MARG => "removed.", LPD_COND => "removed.", MSE_STAT => "traitValidation.TotalSum")
+const mult_dict = Dict(LPD_MARG => 1, LPD_COND => 1, MSE_STAT => -1)
 
 
 
@@ -60,7 +62,7 @@ function XMLRun(name::String, newick::String, taxa::Vector{String}, data::Matrix
                 "in the data matrix.")
     end
     return XMLRun(newick, taxa, data, nothing, k, false, NaN, NaN,
-                  0, name, "", 100, 10, default_loadings(k, p), LPD_STAT)
+                  0, name, "", 100, 10, default_loadings(k, p), MSE_STAT)
 end
 
 function default_loadings(k::Int, p::Int)
@@ -194,7 +196,7 @@ function make_xml(run::XMLRun, vars::PipelineVariables, dir::String;
 
 
     if !isnothing(removed_data) && selection_stat != NO_STAT
-        if selection_stat == LPD_STAT
+        if selection_stat == LPD_COND || selection_stat == LPD_MARG
             flpd = XMLConstructor.FactorLogPredictiveDensity(facs, like)
             XMLConstructor.add_loggable(bx, flpd, already_made = false)
         elseif selection_stat == MSE_STAT
@@ -412,7 +414,14 @@ function model_selection(vars::PipelineVariables, tree_data::TreeData)
                 col, log_data = Logs.get_log_match(log_path,
                                         label_dict[vars.selection_statistic],
                                         burnin = vars.selection_burnin)
-                @assert length(col) == 1
+
+                if vars.selection_statistic == LPD_COND
+                    col, like_data = Logs.get_log_match(log_path,
+                                        "likelihood",
+                                        burnin = vars.selection_burnin)
+                    log_data .-= like_data
+                end
+
                 statistic_df[i, j] = mean(log_data)
                 safe_csvwrite(statistic_path, statistic_df, overwrite = true)
             end
