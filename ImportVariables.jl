@@ -23,6 +23,7 @@ mutable struct PipelineVariables
     beast_sle::Int
     final_chain_length::Int
     final_file_freq::Int
+    full_eval::Int
 
     repeats::Int
     sparsity::Float64
@@ -63,6 +64,7 @@ function import_variables(path::String)
                             SLE,
                             FINAL_CHAIN_LENGTH,
                             FINAL_FILE_FREQUENCY,
+                            LIKELIHOOD_CHECK_COUNT,
                             REPEATS,
                             SPARSITY,
                             SELECTION_BURNIN,

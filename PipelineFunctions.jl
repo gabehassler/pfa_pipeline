@@ -152,6 +152,10 @@ function make_xml(run::XMLRun, vars::PipelineVariables, dir::String;
                                         useHMC = false)
     end
 
+    if vars.full_eval != -1
+        XMLConstructor.set_full_eval(bx, vars.full_eval)
+    end
+
 
     mbd = XMLConstructor.get_mbd(bx)
     facs = XMLConstructor.get_integratedFactorModel(bx)

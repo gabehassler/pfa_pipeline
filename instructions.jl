@@ -31,6 +31,9 @@ BEAST_HOME = joinpath(@__DIR__, "beast.jar") # set this to the directory where y
 SLE = 100 # frequency at which BEAST logs to screen
 FINAL_CHAIN_LENGTH = 10000 # chain length for final xml run
 FINAL_FILE_FREQUENCY = 10 # log-to-file frequency for final xml run
+LIKELIHOOD_CHECK_COUNT = -1 # how many steps in the MCMC chain will BEAST
+                            # double check the likelihood.
+                            # Set to -1 for default BEAST settings.
 
 
 ## Model selection variables
@@ -42,8 +45,9 @@ SELECTION_BURNIN = 0.5 # burnin for model selection (i.e. the proportion of
 
 SELECTION_STATISTIC = "MSE" # specific statistic you're trying to maximize (or minimize)
                                 # Options are:
-                                #     1) "LPD" - log predictive density
-                                #     2) "MSE" - mean squared error
+                                #     1) "CLPD" - log predictive density conditional on observed data
+                                #     2) "MLPD" - marginal log predictive density
+                                #     3) "MSE" - mean squared error
 
 
 ## Plotting files and variables

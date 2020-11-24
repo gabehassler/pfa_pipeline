@@ -1,6 +1,5 @@
 push!(LOAD_PATH, @__DIR__)
 
-using PipelineFunctions, ImportVariables
 
 instructions_paths = String[]
 if length(ARGS) > 0
@@ -18,6 +17,7 @@ else
     push!(instructions_paths, joinpath(@__DIR__, "instructions.jl"))
 end
 
+using PipelineFunctions, ImportVariablesls
 
 try
     for path in instructions_paths
