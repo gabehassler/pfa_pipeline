@@ -17,7 +17,7 @@ else
     push!(instructions_paths, joinpath(@__DIR__, "instructions.jl"))
 end
 
-using PipelineFunctions, ImportVariablesls
+using PipelineFunctions, ImportVariables
 
 try
     for path in instructions_paths
