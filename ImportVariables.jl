@@ -46,6 +46,11 @@ end
 
 function import_variables(path::String)
     include(path)
+    selections_stats = SELECTION_STATISTIC
+    if !(typeof(selections_stats) <: Vector{String})
+        selections_stats = [SELECTION_STATISTIC]
+    end
+
     DATA_DIR = joinpath(@__DIR__, "data")
     return PipelineVariables(name,
                             joinpath(DATA_DIR, data_filename),
@@ -54,7 +59,7 @@ function import_variables(path::String)
                             joinpath(DATA_DIR, labels_filename),
                             MAKE_SELECTION_XML,
                             RUN_SELECTION_XML,
-                            RUN_SELECTION_XML,
+                            MAKE_FINAL_XML,
                             MAKE_FINAL_XML,
                             RUN_FINAL_XML,
                             PLOT_LOADINGS,
@@ -68,7 +73,7 @@ function import_variables(path::String)
                             REPEATS,
                             SPARSITY,
                             SELECTION_BURNIN,
-                            [SELECTION_STATISTIC],
+                            selections_stats,
                             KEEP_THRESHOLD,
                             PLOT_BURNIN,
                             JULIA_SEED,
