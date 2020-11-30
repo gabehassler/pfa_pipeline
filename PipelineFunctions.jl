@@ -691,30 +691,24 @@ function process_log(vars::PipelineVariables, log_path::String,
     row_counts = [count(x -> !ismissing(x), @view L[i, :]) for i = 1:k]
     col_counts = [count(x -> !ismissing(x), @view L[:, j]) for j = 1:p]
 
-    last_row = 1
-    for i = 2:k
-        if row_counts[i] > 1
-            last_row = i
-        end
-    end
-
-    keep_rows = 1:last_row
+    keep_rows = findall(x -> x > 1, row_counts)
+    k_effective = length(keep_rows)
 
     df = DataFrame()
     df.L = vec(L[keep_rows, :])
-    df.col = repeat(1:p, inner=last(keep_rows))
+    df.col = repeat(1:p, inner=k_effective)
     df.row = repeat(keep_rows, outer=p)
 
     trait_names = string.(names(CSV.read(data_path))[2:end])
 
     @assert length(trait_names) == p
 
-    df.trait = repeat(new_names, inner=last(keep_rows))
-    df.cat = repeat(trait_types, inner=last(keep_rows))
+    df.trait = repeat(new_names, inner=k_effective)
+    df.cat = repeat(trait_types, inner=k_effective)
     safe_csvwrite(csv_path, df, overwrite = vars.overwrite)
 
     levs = df.trait
-    return last_row
+    return k_effective
     # return levs[perm]
 end
 
