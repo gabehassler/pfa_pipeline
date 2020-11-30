@@ -19,13 +19,15 @@ const BATCH_DIR = joinpath(@__DIR__, "batch")
 const ALL = 0
 const MAKE_XML = 1
 const PROCESS_LOGS = 2
-const DONE = 3
+const MAKE_DF = 3
+const DONE = 4
 
+const RUN_NAME = "X"
 
 beast_path = joinpath(@__DIR__, "beast.jar")
 beast_sle = 100
-final_chain_length = 100
-final_file_freq = 10
+final_chain_length = 20000
+final_file_freq = 20
 
 repeats = 1
 
@@ -45,27 +47,25 @@ function make_batch(this_dir::String)
 
     for dir in readdir(this_dir, join = true)
         if isdir(dir)
-            for stat in STATS
-                dirs = ["\$HOME", "pfa_pipeline", "simulations",
-                        splitpath(this_dir)[end],
-                        splitpath(dir)[end],
-                        stat,
-                        "selection"]
+            dirs = ["\$HOME", "pfa_pipeline", "simulations",
+                    splitpath(this_dir)[end],
+                    splitpath(dir)[end],
+                    RUN_NAME,
+                    "selection"]
 
-                xml_dir = join([dirs; "xml"], "/")
-                logs_dir = join([dirs; "logs"], "/")
-                for xml in readdir(joinpath(this_dir, dir, stat, "selection", "xml"))
-                    nm = string(split(xml, '.')[1])
-                    bi = BatchInfo(nm)
-                    bi.name = splitpath(dir)[end] * "_" * bi.name
-                    bi.run_time = "4:00:00"
-                    bi.source_dir = xml_dir
-                    bi.dest_dir = logs_dir
-                    bi.email = false
-                    bi.tmp_dir = true
+            xml_dir = join([dirs; "xml"], "/")
+            logs_dir = join([dirs; "logs"], "/")
+            for xml in readdir(joinpath(this_dir, dir, RUN_NAME, "selection", "xml"))
+                nm = string(split(xml, '.')[1])
+                bi = BatchInfo(nm)
+                bi.name = splitpath(dir)[end] * "_" * bi.name
+                bi.run_time = "4:00:00"
+                bi.source_dir = xml_dir
+                bi.dest_dir = logs_dir
+                bi.email = false
+                bi.tmp_dir = true
 
-                    push!(bis, bi)
-                end
+                push!(bis, bi)
             end
         end
     end
@@ -78,38 +78,50 @@ function check_status(this_dir::String; batch::Bool = false)
     status = DONE
 
     if !isdir(this_dir) || isempty(this_dir)
-        return batch ? MAKE_XML : ALL
+        return return_status(MAKE_XML, batch)
+    end
+
+    if isfile(joinpath(this_dir, "results.csv"))
+        return DONE
     end
 
     for dir in readdir(this_dir, join = true)
         if isdir(dir)
             dir_name = splitpath(dir)[end]
-            if isfile(joinpath(dir, "$dir_name.log"))
-                status = DONE
+
+
+            run_dir = joinpath(dir, RUN_NAME)
+            for file in readdir(run_dir)
+                if endswith(file, ".log")
+                    return MAKE_DF
+                end
             end
 
-            for stat in STATS
-                stat_dir = joinpath(this_dir, dir, stat, "selection")
-                xml_dir = joinpath(stat_dir, "xml")
-                logs_dir = joinpath(stat_dir, "logs")
+            selection_dir = joinpath(run_dir, "selection")
+            xml_dir = joinpath(selection_dir, "xml")
+            logs_dir = joinpath(selection_dir, "logs")
 
-                if !isdir(xml_dir) || isempty(xml_dir)
-                    if batch
-                        status = MAKE_XML
-                    else
-                        staus = ALL
-                    end
-                end
+            if !isdir(xml_dir) || isempty(xml_dir)
+                return return_status(MAKE_XML, batch)
+            end
 
-                if isdir(logs_dir) && !isempty(logs_dir)
-                    status = PROCESS_LOGS
+            if isdir(logs_dir)
+                if length(readdir(logs_dir)) != 0
+                    return return_status(PROCESS_LOGS, batch)
+                else
+                    return return_status(MAKE_XML, batch)
                 end
             end
         end
     end
 
+    error("unknown condition")
+
+end
+
+function return_status(status::Int, batch::Bool)
     if !batch
-        if !(status == ALL || status == DONE)
+        if !(status == ALL || status == DONE || status == MAKE_DF)
             status = ALL
         end
     end
@@ -169,7 +181,7 @@ function simulate_data(sim_name::String,
                         ns::Vector{Int}, ks::Vector{Int}, ps::Vector{Int},
                         n_sims::Int;
                         shrinkage_shape::Float64 = 2.0,
-                        shrinkage_scale::Float64 = 2.0,
+                        shrinkage_scale::Float64 = 1.0,
                         res_shape::Float64 = 2.0,
                         res_scale::Float64 = 1.0,
                         overwrite::Bool = false,
@@ -276,7 +288,7 @@ function run_sim_pipelines(this_dir::String; status::Int = NONE)
             metadata_path = joinpath(dir, METADATA_NAME)
             cd(dir)
 
-            vars = PipelineVariables("X",
+            vars = PipelineVariables(RUN_NAME,
                                     data_path,
                                     newick_path,
                                     INSTRUCTIONS,
@@ -293,6 +305,7 @@ function run_sim_pipelines(this_dir::String; status::Int = NONE)
                                     beast_sle,
                                     final_chain_length,
                                     final_file_freq,
+                                    0,
                                     repeats,
                                     sparsity,
                                     selection_burnin,
@@ -307,7 +320,9 @@ function run_sim_pipelines(this_dir::String; status::Int = NONE)
                                     )
             vars_dict[dir] = vars
 
-            run_pipeline(vars)
+            if status != MAKE_DF
+                run_pipeline(vars)
+            end
         end
     end
 
@@ -327,8 +342,6 @@ function process_simulations(this_dir::String,
 
 
     ind = 1
-
-    @show keys(vars_dict)
 
     for dir in readdir(this_dir, join = true)
         if isdir(dir)
