@@ -39,6 +39,7 @@ mutable struct PipelineVariables
 
     constrain_loadings::Bool
     shrink::Bool
+    standardize::Bool
 
     batch::Bool
 end
@@ -80,6 +81,7 @@ function import_variables(path::String)
                             BEAST_SEED,
                             CONSTRAIN_LOADINGS,
                             SHRINK_LOADINGS,
+                            STANDARDIZE_DATA,
                             false
                             )
 end

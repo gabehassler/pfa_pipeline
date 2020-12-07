@@ -387,7 +387,9 @@ function model_selection(vars::PipelineVariables, tree_data::TreeData)
     df = CSV.read(vars.instructions_path)
     n_opts = size(df, 1)
     selection_data = copy(tree_data.data)
-    standardize_data!(selection_data)
+    if vars.standardize
+        standardize_data!(selection_data)
+    end
 
     xmlruns = [XMLRun(vars.name * "_" * mod_select_name, tree_data.newick,
                     tree_data.taxa, selection_data)
@@ -524,7 +526,7 @@ function run_final_xml(vars::PipelineVariables, final_run::XMLRun, data::Matrix{
     final_filename = final_run.filename * ".xml"
 
     if vars.make_final_xml
-        xml = make_xml(final_run, vars, pwd(); standardize = true, log_factors = true)
+        xml = make_xml(final_run, vars, pwd(); standardize = vars.standardize, log_factors = true)
     end
 
     if vars.run_final_xml
