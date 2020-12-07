@@ -137,14 +137,16 @@ function process_log(log_path::String, header::Union{Regex, String}, k::Int,
         # l_storage[i, :] .= vec(s.Vt' * Diagonal(s.S))
 
         if rotate_factors
+            U = Matrix(Diagonal(ones(ke)))
             if do_svd
-                copyto!(Ft, @view f_data[i, fac_inds])
-                gemm!('T', 'N', 1.0, s.U, Ft, 0.0, UtFt)
-                for j = 1:n_taxa
-                    offset = (j - 1) * k
-                    for l = 1:ke
-                        f_storage[i, offset + relevant_rows[l]] = UtFt[l, j]
-                    end
+                U = s.U
+            end
+            copyto!(Ft, @view f_data[i, fac_inds])
+            gemm!('T', 'N', 1.0, U, Ft, 0.0, UtFt)
+            for j = 1:n_taxa
+                offset = (j - 1) * k
+                for l = 1:ke
+                    f_storage[i, offset + relevant_rows[l]] = UtFt[l, j]
                 end
             end
             for j = 1:n_taxa
