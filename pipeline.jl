@@ -25,8 +25,8 @@ try
         run_pipeline(vars)
     end
 catch e
+    @error "Something went wrong" exception=(e, catch_backtrace())
     cd(@__DIR__)
-    throw(e)
 end
 
 cd(@__DIR__)
