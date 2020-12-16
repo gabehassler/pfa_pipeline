@@ -18,7 +18,7 @@ cd(@__DIR__)
 
 
 const FIX_GLOBAL = false
-const FIX_FIRST = false
+const FIX_FIRST = true
 const BASE_SHAPE = 2.0
 
 # const LPD_STAT = "LPD"
@@ -212,8 +212,12 @@ function make_xml(run::XMLRun, vars::PipelineVariables, dir::String;
         end
     end
 
-    if FIX_GLOBAL || FIX_FIRST
+    if FIX_GLOBAL
         error("not implemented")
+    end
+    if FIX_FIRST
+        indices = collect(2:k)
+        XMLConstructor.set_muliplicative_gamma_indices(bx, indices)
     end
     # if FIX_GLOBAL && shrink
     #     msop = ops[findfirst(x -> isa(x, XMLConstructor.ShrinkageScaleOperators), ops)]
