@@ -20,6 +20,7 @@ cd(@__DIR__)
 const FIX_GLOBAL = false
 const FIX_FIRST = true
 const BASE_SHAPE = 2.0
+const BASE_SCALE = 1.0
 
 # const LPD_STAT = "LPD"
 const MSE_STAT = "MSE"
@@ -91,9 +92,9 @@ function name_run!(run::XMLRun)
     @unpack shrink, rep, base_name = run
     nm = [base_name]
     if shrink
-        @unpack shape_multiplier = run
-        shape_string = float2string(log10(shape_multiplier))
-        push!(nm, "shape$shape_string")
+        @unpack scale_multiplier = run
+        scale_string = float2string(log10(scale_multiplier))
+        push!(nm, "scale$scale_string")
     # else
 
     end
@@ -135,6 +136,7 @@ function make_xml(run::XMLRun, vars::PipelineVariables, dir::String;
     shapes = fill(mult_shape, k)
     shapes[1] = BASE_SHAPE
     scales = fill(mult_scale, k)
+    scales[1] = BASE_SCALE
 
     if shrink
 
@@ -403,10 +405,10 @@ function model_selection(vars::PipelineVariables, tree_data::TreeData)
     for i = 1:n_opts
         k_max = df.k[i]
         shape_exp = df.shape_exp[i]
-        shape = 10.0^shape_exp
+        shape = 2.0
         # scale_exp = df.scale_exp[i]
         # scale = 10.0^scale_exp
-        scale = 1.0
+        scale = 10.0^shape_exp
         chain_length = df.chain_length[i]
         fle = df.file_freq[i]
         for j = 1:vars.repeats
