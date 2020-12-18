@@ -19,7 +19,7 @@ cd(@__DIR__)
 
 const FIX_GLOBAL = false
 const FIX_FIRST = true
-const BASE_SHAPE = 2.0
+const BASE_SHAPE = 10.0
 const BASE_SCALE = 1.0
 
 # const LPD_STAT = "LPD"
@@ -405,7 +405,7 @@ function model_selection(vars::PipelineVariables, tree_data::TreeData)
     for i = 1:n_opts
         k_max = df.k[i]
         shape_exp = df.shape_exp[i]
-        shape = 2.0
+        shape = BASE_SHAPE
         # scale_exp = df.scale_exp[i]
         # scale = 10.0^scale_exp
         scale = 10.0^shape_exp
