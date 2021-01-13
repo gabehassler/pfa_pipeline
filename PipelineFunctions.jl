@@ -214,10 +214,10 @@ function make_xml(run::XMLRun, vars::PipelineVariables, dir::String;
         end
     end
 
-    if FIX_GLOBAL
+    if FIX_GLOBAL && shrink
         error("not implemented")
     end
-    if FIX_FIRST
+    if FIX_FIRST && shrink
         indices = collect(2:k)
         XMLConstructor.set_muliplicative_gamma_indices(bx, indices)
     end
