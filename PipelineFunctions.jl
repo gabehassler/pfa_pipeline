@@ -391,7 +391,7 @@ function model_selection(vars::PipelineVariables, tree_data::TreeData)
 
     ## Read instructions and setup xml files
 
-    df = CSV.read(vars.instructions_path)
+    df = DataFrame(CSV.File(vars.instructions_path))
     n_opts = size(df, 1)
     selection_data = copy(tree_data.data)
     if vars.standardize
@@ -509,7 +509,7 @@ function model_selection(vars::PipelineVariables, tree_data::TreeData)
     end
 
 
-    stat_means = [mean(Matrix{Float64}(CSV.read(path)), dims=2) for path in statistic_paths]
+    stat_means = [mean(Matrix{Float64}(DataFrame(CSV.File(path))), dims=2) for path in statistic_paths]
     best_inds = [findmax(vec(mult_dict[vars.selection_statistics[i]] *
                                         stat_means[i]))[2] for i = 1:n_stats]
 
@@ -566,7 +566,7 @@ function plot_loadings(vars::PipelineVariables, final_run::XMLRun, svd_path::Str
     # cd(@__DIR__)
     # nms = string.(names(CSV.read(data_path)))
 
-    labels_df = CSV.read(metadata_path)
+    labels_df = DataFrame(CSV.File(metadata_path))
     cat_levs = unique(labels_df.cat)
 
     nm = final_run.filename
@@ -666,14 +666,15 @@ function process_log(vars::PipelineVariables, log_path::String,
     lower_threshold = Int(ceil((1.0 - vars.keep_threshold) * n))
 
     L = Matrix{Union{Missing, Float64}}(undef, k, p)
+    percs = zeros(k, p)
     fill!(L, missing)
 
-    labels_df = CSV.read(labels_path)
+    labels_df = DataFrame(CSV.File(labels_path))
     labels = labels_df.label
     new_names = labels_df.pretty
     trait_types = labels_df.cat
 
-    original_labels = string.(names(CSV.read(data_path))[2:end]) # TODO: this is super inefficient, just get labels
+    original_labels = string.(names(DataFrame(CSV.File(data_path)))[2:end]) # TODO: this is super inefficient, just get labels
 
     @assert length(labels) == length(original_labels)
     perm = indexin(original_labels, labels)
@@ -690,6 +691,7 @@ function process_log(vars::PipelineVariables, log_path::String,
             n_neg = count(x -> x < 0.0, vals)
             if n_pos > upper_threshold || n_neg > upper_threshold
                 L[i, perm[j]] = mean(@view L_data[:, col])
+                percs[i, perm[j]] = max(n_pos, n_neg) / n
             end
         end
     end
@@ -705,10 +707,12 @@ function process_log(vars::PipelineVariables, log_path::String,
 
     df = DataFrame()
     df.L = vec(L[keep_rows, :])
+    df.perc = vec(percs[keep_rows, :])
     df.col = repeat(1:p, inner=k_effective)
     df.row = repeat(keep_rows, outer=p)
 
-    trait_names = string.(names(CSV.read(data_path))[2:end])
+
+    trait_names = string.(names(DataFrame(CSV.File(data_path)))[2:end]) # TODO: just get the top row
 
     @assert length(trait_names) == p
 

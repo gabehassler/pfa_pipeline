@@ -21,8 +21,10 @@ using PipelineFunctions, ImportVariables
 
 try
     for path in instructions_paths
-        vars = import_variables(path)
-        run_pipeline(vars)
+        all_vars = import_variables(path)
+        for vars in all_vars
+            run_pipeline(vars)
+        end
     end
 catch e
     @error "Something went wrong" exception=(e, catch_backtrace())
