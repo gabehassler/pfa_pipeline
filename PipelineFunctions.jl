@@ -3,18 +3,13 @@ module PipelineFunctions
 export run_pipeline, safe_mkdir
 
 using BeastUtils.XMLConstructor, BeastUtils.DataStorage, BeastUtils.MatrixUtils,
-        BeastUtils.RunBeast, BeastUtils.Logs, BeastUtils.BeastNames
+        BeastUtils.RunBeast, BeastUtils.Logs, BeastUtils.BeastNames, PosteriorSummary
 
 push!(LOAD_PATH, @__DIR__)
 using SpecialSVDProcessing, ImportVariables
 
 using CSV, DataFrames, LinearAlgebra, Statistics, UnPack, RCall
 import Random
-
-cd(@__DIR__)
-
-
-
 
 
 const FIX_GLOBAL = false
@@ -144,18 +139,20 @@ function make_xml(run::XMLRun, vars::PipelineVariables, dir::String;
                                         chain_length = chain_length,
                                         sle = vars.beast_sle,
                                         fle = fle,
-                                        log_factors = log_factors)
+                                        log_factors = log_factors,
+                                        timing = true)
     else
         bx = XMLConstructor.make_pfa_xml(data, taxa, newick, k,
                                         chain_length = chain_length,
                                         sle = vars.beast_sle,
                                         fle = fle,
                                         log_factors = log_factors,
-                                        useHMC = false)
+                                        useHMC = false,
+                                        timing = true)
     end
 
     if vars.full_eval != -1
-        XMLConstructor.set_full_eval(bx, vars.full_eval)
+        XMLConstructor.set_full_eval!(bx, vars.full_eval)
     end
 
 
@@ -328,6 +325,7 @@ end
 
 
 function run_pipeline(vars::PipelineVariables)
+    t1 = time()
     old_dir = pwd()
     if (vars.julia_seed != -1)
         Random.seed!(vars.julia_seed)
@@ -374,6 +372,8 @@ function run_pipeline(vars::PipelineVariables)
         end
         @show eff_ks
     end
+    t2 = time()
+    write("time.txt", "$(t2 - t1) seconds")
 
     cd(old_dir)
     return eff_ks
@@ -665,62 +665,56 @@ function process_log(vars::PipelineVariables, log_path::String,
     upper_threshold = Int(floor(vars.keep_threshold * n))
     lower_threshold = Int(ceil((1.0 - vars.keep_threshold) * n))
 
-    L = Matrix{Union{Missing, Float64}}(undef, k, p)
-    percs = zeros(k, p)
-    fill!(L, missing)
+    df = DataFrame([String, String, Int, Int, Float64, Float64, Float64, Float64],
+                   ["trait", "cat", "col", "row", "L", "perc", "hpdu", "hpdl"],
+                   k * p)
 
     labels_df = DataFrame(CSV.File(labels_path))
     labels = labels_df.label
     new_names = labels_df.pretty
     trait_types = labels_df.cat
 
-    original_labels = string.(names(DataFrame(CSV.File(data_path)))[2:end]) # TODO: this is super inefficient, just get labels
+    original_labels = string.(CSV.File(data_path).names)[2:end] # TODO: this is super inefficient, just get labels
 
     @assert length(labels) == length(original_labels)
     perm = indexin(original_labels, labels)
 
     @assert length(findall(isnothing, perm)) == 0
 
+    row_counts = zeros(Int, k)
+
 
     for i = 1:k
         for j in 1:p
-            col = (i - 1) * p + j
-            @assert L_cols[col] == "$L_header$i$(j)"
-            vals = @view(L_data[:, col])
-            n_pos = count(x -> x > 0.0, vals)
-            n_neg = count(x -> x < 0.0, vals)
-            if n_pos > upper_threshold || n_neg > upper_threshold
-                L[i, perm[j]] = mean(@view L_data[:, col])
-                percs[i, perm[j]] = max(n_pos, n_neg) / n
+            ind = (i - 1) * p + j
+            @assert L_cols[ind] == "$L_header$i$(j)"
+
+            df.trait[ind] = new_names[perm[j]]
+            df.cat[ind] = trait_types[perm[j]]
+            df.col[ind] = perm[j]
+            df.row[ind] = i
+
+            vals = @view(L_data[:, ind])
+            μ = mean(vals)
+            df.L[ind] = μ
+
+            hpd = hpd_interval(vals)
+            df.hpdu[ind] = hpd.upper
+            df.hpdl[ind] = hpd.lower
+
+            perc_same = count(x -> sign(μ) * x > 0.0, vals) / n
+            df.perc[ind] = perc_same
+            if perc_same > vars.keep_threshold
+                row_counts[i] += 1
             end
         end
     end
 
-    m_count = count(x -> ismissing(x), L)
-    @show m_count / (k * p)
-
-    row_counts = [count(x -> !ismissing(x), @view L[i, :]) for i = 1:k]
-    col_counts = [count(x -> !ismissing(x), @view L[:, j]) for j = 1:p]
-
     keep_rows = findall(x -> x > 1, row_counts)
     k_effective = length(keep_rows)
 
-    df = DataFrame()
-    df.L = vec(L[keep_rows, :])
-    df.perc = vec(percs[keep_rows, :])
-    df.col = repeat(1:p, inner=k_effective)
-    df.row = repeat(keep_rows, outer=p)
-
-
-    trait_names = string.(names(DataFrame(CSV.File(data_path)))[2:end]) # TODO: just get the top row
-
-    @assert length(trait_names) == p
-
-    df.trait = repeat(new_names, inner=k_effective)
-    df.cat = repeat(trait_types, inner=k_effective)
     safe_csvwrite(csv_path, df, overwrite = vars.overwrite)
 
-    levs = df.trait
     return k_effective
     # return levs[perm]
 end
