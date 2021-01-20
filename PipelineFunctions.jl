@@ -761,26 +761,73 @@ function import_r_functions()
     R"""
     library(ggplot2)
     plot_loadings <- function(csv_path, plot_name, trait_levs, cat_levs){
-    df  <- read.csv(csv_path, header=TRUE)
+        df  <- read.csv(csv_path, header=TRUE)
 
-    df$trait <- factor(df$trait, levels=trait_levs)
-    df$cat <- factor(df$cat, levels=cat_levs)
-    df$L <- sapply(df$L, as.numeric)
-    ggplot(df, aes(x=trait, y=row, fill=L)) +
-            facet_grid(~ cat, scales="free_x", space="free_x") +
-            geom_tile() +
-            scale_fill_gradient2(low="orange", mid="white", high="purple", midpoint=0) +
-            scale_x_discrete(position = "top") +
-            scale_y_discrete(limits=fact) +
-      labs(y="Loadings Row", x="Trait") +
-      theme_minimal() +
-      theme(axis.text.x = element_text(angle=90, hjust=0),
-            strip.text.x = element_blank()
-            )
-            # axis.title.y = element_text())
+        df$trait <- factor(df$trait, levels=trait_levs)
+        df$cat <- factor(df$cat, levels=cat_levs)
+        df$L <- sapply(df$L, as.numeric)
+        # df$sign_perc <- df$perc
+        # for (i in 1:length(df$perc)) {
+        #   if (df$L[i] < 0.0) {
+        #     df$sign_perc[i] <- -df$sign_perc[i]
+        #   }
+        # }
 
-    ggsave(plot_name, width=15, height=10, units="in")
-    gc()
+        df$sign <- sapply(df$L, sign)
+        n <- dim(df)[[1]]
+        for (i in 1:n) {
+            if (df$hpdl[i] <= 0 && df$hpdu[i] >= 0) {
+            df$sign[i] = 0
+            }
+        }
+        df$sign <- factor(df$sign, levels=c(1, 0, -1))
+        ymin = min(df$hpdl)
+        ymax = max(df$hpdu)
+
+        k <- max(df$row)
+        facet_labels <- character(k)
+        facet_names <- integer(k)
+        for (i in 1:k) {
+            facet_labels[i] = paste("factor", i)
+            facet_names[i] = i
+        }
+        names(facet_labels) <- facet_names
+
+        # ps <- c()
+        # for (i in 1:max(df$row)) {
+        #   ps <- c(ps, plot_single_row(df, 1, ymin, ymax))
+        # }
+        p <- ggplot(df) +
+            geom_hline(yintercept=0, linetype="dashed") +
+            geom_point(aes(x=trait, y=L, color=sign), size=1.5) +
+            geom_errorbar(aes(x=trait, ymin=hpdl, ymax=hpdu, color=sign), width=0.25, size=1) +
+            scale_color_manual(values=c("blue", "grey", "red")) +
+            # scale_color_gradient2(low="orange", mid="white", high="purple", limits=c(-1, 1), name="L") +
+            #facet_grid(~ cat, scales="free_x", space="free_x") +
+            #geom_tile() +
+            #scale_fill_gradient2(low="orange", mid="white", high="purple", midpoint=0) +
+            #scale_x_discrete(position = "top") +
+            # scale_y_discrete() +
+            labs(y="loadings", x="") +
+            theme_minimal() +
+            theme(axis.text.x = element_text(angle=90, hjust=1),
+                panel.border = element_rect(colour = "black", fill=NA),
+                panel.grid.major.y = element_blank(),
+                panel.grid.minor.y = element_blank(),
+                legend.position = "none"
+                ) +
+            ylim(ymin, ymax) +
+            facet_grid(cols=vars(cat),
+                    rows=vars(row),
+                    labeller = labeller(row=facet_labels),
+                    scales="free_x",
+                    space="free_x",
+                    switch = "x")
+
+        # axis.title.y = element_text())
+
+        ggsave(plot_name, width=10, height=7, units="in")
+        gc()
     }
 
     plot_factors <- function(csv_path, plot_name){
