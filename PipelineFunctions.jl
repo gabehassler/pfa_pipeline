@@ -760,6 +760,7 @@ end
 function import_r_functions()
     R"""
     library(ggplot2)
+    library(wesanderson)
     plot_loadings <- function(csv_path, plot_name, trait_levs, cat_levs){
         df  <- read.csv(csv_path, header=TRUE)
 
@@ -797,11 +798,15 @@ function import_r_functions()
         # for (i in 1:max(df$row)) {
         #   ps <- c(ps, plot_single_row(df, 1, ymin, ymax))
         # }
+
+        wes_pal <- wes_palette("GrandBudapest2")
+        pal <- c(wes_pal[1], "grey", wes_pal[4])
+
         p <- ggplot(df) +
             geom_hline(yintercept=0, linetype="dashed") +
             geom_point(aes(x=trait, y=L, color=sign), size=1.5) +
             geom_errorbar(aes(x=trait, ymin=hpdl, ymax=hpdu, color=sign), width=0.25, size=1) +
-            scale_color_manual(values=c("blue", "grey", "red")) +
+            scale_color_manual(values=pal) +
             # scale_color_gradient2(low="orange", mid="white", high="purple", limits=c(-1, 1), name="L") +
             #facet_grid(~ cat, scales="free_x", space="free_x") +
             #geom_tile() +
