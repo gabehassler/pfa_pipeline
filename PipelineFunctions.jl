@@ -16,6 +16,10 @@ const FIX_GLOBAL = false
 const FIX_FIRST = true
 const BASE_SHAPE = 10.0
 const BASE_SCALE = 1.0
+const SHAPE = "shape"
+const SCALE = "scale"
+const BOTH = "both"
+const SCALE_BY = BOTH
 
 # const LPD_STAT = "LPD"
 const MSE_STAT = "MSE"
@@ -87,9 +91,10 @@ function name_run!(run::XMLRun)
     @unpack shrink, rep, base_name = run
     nm = [base_name]
     if shrink
-        @unpack scale_multiplier = run
+        @unpack scale_multiplier, shape_multiplier = run
         scale_string = float2string(log10(scale_multiplier))
-        push!(nm, "scale$scale_string")
+        shape_string = float2string(log10(shape_multiplier))
+        push!(nm, "scale$(scale_string)_shape$shape_string")
     # else
 
     end
@@ -404,11 +409,19 @@ function model_selection(vars::PipelineVariables, tree_data::TreeData)
 
     for i = 1:n_opts
         k_max = df.k[i]
-        shape_exp = df.shape_exp[i]
+        selection_exp = df.shape_exp[i]
         shape = BASE_SHAPE
-        # scale_exp = df.scale_exp[i]
-        # scale = 10.0^scale_exp
-        scale = 10.0^shape_exp
+        scale = BASE_SCALE
+
+        if SCALE_BY == SHAPE
+            shape = 10.0^selection_exp
+        elseif SCALE_BY == SCALE
+            scale = 10.0^selection_exp
+        elseif SCALE_BY == BOTH
+            scale = 10.0^(0.5 * selection_exp)
+            shape = scale
+        end
+
         chain_length = df.chain_length[i]
         fle = df.file_freq[i]
         for j = 1:vars.repeats

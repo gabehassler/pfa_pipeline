@@ -7,12 +7,17 @@ using Distributions, LinearAlgebra, PhyloNetworks, DataFrames, CSV
 using BeastUtils.Simulation, BeastUtils.TreeUtils, BeastUtils.DataStorage
 using PipelineFunctions, ImportVariables, BatchSetup
 
-const INSTRUCTIONS = joinpath(@__DIR__, "sim_selection.csv")
+const INSTRUCTIONS = Dict{Bool, String}(
+                        true => joinpath(@__DIR__, "sim_shrink.csv"),
+                        false => joinpath(@__DIR__, "sim_noShrink.csv")
+                                        )
+
 const SIM_DIRECTORY = joinpath(@__DIR__, "simulations")
 const DATA_NAME = "data.csv"
 const NEWICK_NAME = "newick.txt"
 const METADATA_NAME = "metadata.csv"
 const STATS = ["MLPD", "CLPD"]
+const SHRINKS = [true, false]
 const BATCH = false
 const BATCH_DIR = joinpath(@__DIR__, "batch")
 
@@ -22,7 +27,8 @@ const PROCESS_LOGS = 2
 const MAKE_DF = 3
 const DONE = 4
 
-const RUN_NAME = "X"
+const BASE_NAME = "X"
+const RUN_NAMES = ["X_shrink$s" for s in SHRINKS]
 
 beast_path = joinpath(@__DIR__, "beast.jar")
 beast_sle = 100
@@ -39,8 +45,6 @@ plot_burnin = 0.9
 
 julia_seed = 666
 beast_seed = 666
-
-constrain_loadings = false
 
 function make_batch(this_dir::String)
     bis = BatchInfo[]
@@ -77,7 +81,7 @@ function check_status(this_dir::String; batch::Bool = false)
 
     status = DONE
 
-    if !isdir(this_dir) || isempty(this_dir)
+    if !isdir(this_dir) || length(readdir(this_dir)) == 0
         return return_status(MAKE_XML, batch)
     end
 
@@ -89,27 +93,28 @@ function check_status(this_dir::String; batch::Bool = false)
         if isdir(dir)
             dir_name = splitpath(dir)[end]
 
-
-            run_dir = joinpath(dir, RUN_NAME)
-            for file in readdir(run_dir)
-                if endswith(file, ".log")
-                    return MAKE_DF
+            for i = 1:length(RUN_NAMES)
+                run_dir = joinpath(dir, RUN_NAMES[i])
+                for file in readdir(run_dir)
+                    if endswith(file, ".log")
+                        return MAKE_DF
+                    end
                 end
-            end
 
-            selection_dir = joinpath(run_dir, "selection")
-            xml_dir = joinpath(selection_dir, "xml")
-            logs_dir = joinpath(selection_dir, "logs")
+                selection_dir = joinpath(run_dir, "selection")
+                xml_dir = joinpath(selection_dir, "xml")
+                logs_dir = joinpath(selection_dir, "logs")
 
-            if !isdir(xml_dir) || isempty(xml_dir)
-                return return_status(MAKE_XML, batch)
-            end
-
-            if isdir(logs_dir)
-                if length(readdir(logs_dir)) != 0
-                    return return_status(PROCESS_LOGS, batch)
-                else
+                if !isdir(xml_dir) || isempty(xml_dir)
                     return return_status(MAKE_XML, batch)
+                end
+
+                if isdir(logs_dir)
+                    if length(readdir(logs_dir)) != 0
+                        return return_status(PROCESS_LOGS, batch)
+                    else
+                        return return_status(MAKE_XML, batch)
+                    end
                 end
             end
         end
@@ -214,7 +219,7 @@ function simulate_data(sim_name::String,
         for k in ks
             for p in ps
                 for i = 1:n_sims
-                    dense_dim = sparse_loadings ? div(k, 2) : p
+                    dense_dim = sparse_loadings ? div(k, 2) : k
                     Vt = random_orthonormal(k, p, dense_dim=dense_dim)
                     λ = 1.0 ./ rand(λ_dist, p)
                     mults = rand(mults_dist, k)
@@ -258,9 +263,11 @@ end
 
 
 
-function run_sim_pipelines(this_dir::String; status::Int = NONE)
+function run_sim_pipelines(this_dir::String;
+                           status::Int = NONE,
+                           compare_shrinkage::Bool = true)
     old_dir = pwd()
-    vars_dict = Dict{String, PipelineVariables}()
+    vars_dict = Dict{String, Vector{PipelineVariables}}()
 
     make_selection = true
     run_selection = true
@@ -279,8 +286,6 @@ function run_sim_pipelines(this_dir::String; status::Int = NONE)
         do_final = true
     end
 
-
-
     for dir in readdir(this_dir, join = true)
         if isdir(dir)
             data_path = joinpath(dir, DATA_NAME)
@@ -288,40 +293,51 @@ function run_sim_pipelines(this_dir::String; status::Int = NONE)
             metadata_path = joinpath(dir, METADATA_NAME)
             cd(dir)
 
-            vars = PipelineVariables(RUN_NAME,
-                                    data_path,
-                                    newick_path,
-                                    INSTRUCTIONS,
-                                    metadata_path,
-                                    make_selection,
-                                    run_selection,
-                                    process_logs,
-                                    do_final,
-                                    do_final,
-                                    false,
-                                    false,
-                                    true,
-                                    beast_path,
-                                    beast_sle,
-                                    final_chain_length,
-                                    final_file_freq,
-                                    0,
-                                    repeats,
-                                    sparsity,
-                                    selection_burnin,
-                                    STATS,
-                                    keep_threshold,
-                                    plot_burnin,
-                                    julia_seed,
-                                    beast_seed,
-                                    constrain_loadings,
-                                    true,
-                                    false
-                                    )
-            vars_dict[dir] = vars
+            n = length(SHRINKS)
 
-            if status != MAKE_DF
-                run_pipeline(vars)
+            vars_dict[dir] = Vector{PipelineFunctions.PipelineVariables}(undef, n)
+
+
+            for i = 1:n
+                shrink = SHRINKS[i]
+                instructions = INSTRUCTIONS[shrink]
+
+                vars = PipelineVariables(RUN_NAMES[i],
+                                        data_path,
+                                        newick_path,
+                                        instructions,
+                                        metadata_path,
+                                        make_selection,
+                                        run_selection,
+                                        process_logs,
+                                        do_final,
+                                        do_final,
+                                        false,
+                                        false,
+                                        true,
+                                        beast_path,
+                                        beast_sle,
+                                        final_chain_length,
+                                        final_file_freq,
+                                        0,
+                                        repeats,
+                                        sparsity,
+                                        selection_burnin,
+                                        STATS,
+                                        keep_threshold,
+                                        plot_burnin,
+                                        julia_seed,
+                                        beast_seed,
+                                        false,
+                                        shrink,
+                                        true,
+                                        false
+                                        )
+                vars_dict[dir][i] = vars
+
+                if status != MAKE_DF
+                    run_pipeline(vars)
+                end
             end
         end
     end
@@ -335,10 +351,12 @@ function run_sim_pipelines(this_dir::String; status::Int = NONE)
 end
 
 function process_simulations(this_dir::String,
-                    vars_dict::Dict{String, PipelineVariables},
+                    vars_dict::Dict{String, Vector{PipelineVariables}},
                     sim_name::String)
     n_sims = count(isdir(dir) for dir in readdir(this_dir, join = true))
-    df = DataFrame([String, Int, Int, Int, Int], ["stat", "n", "k", "p", "k_inferred"], n_sims * length(STATS))
+    df = DataFrame([String, Bool, Int, Int, Int, Int],
+                   ["stat", "shrink", "n", "k", "p", "k_inferred"],
+                   n_sims * length(STATS) * length(SHRINKS))
 
 
     ind = 1
@@ -348,27 +366,30 @@ function process_simulations(this_dir::String,
             (n, k, p) = parse_initial(dir, sim_name)
             cd(dir)
 
-            vars = vars_dict[dir]
-            vars.make_selection_xml = false
-            vars.run_selection_xml = false
-            vars.make_final_xml = false
-            vars.run_final_xml = false
-            vars.compute_k = true
+            all_vars = vars_dict[dir]
+            for vars in all_vars
+                vars.make_selection_xml = false
+                vars.run_selection_xml = false
+                vars.make_final_xml = false
+                vars.run_final_xml = false
+                vars.compute_k = true
 
-            eff_ks = run_pipeline(vars)
+                eff_ks = run_pipeline(vars)
 
-            n_stats = length(STATS)
-            rng = ind:(ind + n_stats - 1)
+                n_stats = length(STATS)
+                rng = ind:(ind + n_stats - 1)
 
-            for i = 1:length(rng)
-                df.stat[rng[i]] = STATS[i]
-                df.k_inferred[rng[i]] = eff_ks[i]
+                for i = 1:length(rng)
+                    df.stat[rng[i]] = STATS[i]
+                    df.k_inferred[rng[i]] = eff_ks[i]
+                end
+
+                df.n[rng] .= n
+                df.k[rng] .= k
+                df.p[rng] .= p
+                df.shrink[rng] .= vars.shrink
+                ind += n_stats
             end
-
-            df.n[rng] .= n
-            df.k[rng] .= k
-            df.p[rng] .= p
-            ind += n_stats
         end
     end
 
