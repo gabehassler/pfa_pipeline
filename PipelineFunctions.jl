@@ -169,7 +169,7 @@ function make_xml(run::XMLRun, vars::PipelineVariables, dir::String;
         XMLConstructor.set_shrinkage_mults!(facs,
                                             shapes = shapes,
                                             scales = scales,
-                                            set_values = false)
+                                            set_values = true)
     end
     like = XMLConstructor.get_traitLikelihood(bx)
 
