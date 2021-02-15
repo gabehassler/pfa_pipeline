@@ -14,12 +14,14 @@ import Random
 
 const FIX_GLOBAL = false
 const FIX_FIRST = true
-const BASE_SHAPE = 10.0
+const INITIALZE_SHRINKAGE = true
+const BASE_SHAPE = 1.0
 const BASE_SCALE = 1.0
 const SHAPE = "shape"
 const SCALE = "scale"
 const BOTH = "both"
-const SCALE_BY = BOTH
+const SCALE_BY = SHAPE
+const SCALE_BASES = true
 
 # const LPD_STAT = "LPD"
 const MSE_STAT = "MSE"
@@ -33,6 +35,7 @@ const trait_dict = Dict(LPD_MARG => REMOVED, LPD_COND => JOINT, MSE_STAT => JOIN
 const label_dict = Dict(LPD_MARG => "$(trait_dict[LPD_MARG]).", LPD_COND => "$(trait_dict[LPD_COND]).", MSE_STAT => "traitValidation.TotalSum")
 const mult_dict = Dict(LPD_MARG => 1, LPD_COND => 1, MSE_STAT => -1)
 
+const INIT_SHRINK_WITH_SVD = true
 
 
 mutable struct XMLRun
@@ -138,6 +141,19 @@ function make_xml(run::XMLRun, vars::PipelineVariables, dir::String;
     scales = fill(mult_scale, k)
     scales[1] = BASE_SCALE
 
+    if SCALE_BASES
+        trV = sum(tr(MatrixUtils.missing_cov(data)[1]))
+        if SCALE_BY == SHAPE
+            shapes[1] = 1.0 / trV
+        elseif SCALE_BY == SCALE
+            scales[1] = 1.0 / trV
+        elseif SCALE_BY == BOTH
+            v = sqrt(1.0 / trV)
+            shapes[1] = v
+            scales[1] = v
+        end
+    end
+
     if shrink
 
         bx = XMLConstructor.make_orthogonal_pfa_xml(data, taxa, newick, k,
@@ -145,7 +161,8 @@ function make_xml(run::XMLRun, vars::PipelineVariables, dir::String;
                                         sle = vars.beast_sle,
                                         fle = fle,
                                         log_factors = log_factors,
-                                        timing = true)
+                                        timing = true,
+                                        force_ordered = false)
     else
         bx = XMLConstructor.make_pfa_xml(data, taxa, newick, k,
                                         chain_length = chain_length,
@@ -164,12 +181,18 @@ function make_xml(run::XMLRun, vars::PipelineVariables, dir::String;
     mbd = XMLConstructor.get_mbd(bx)
     facs = XMLConstructor.get_integratedFactorModel(bx)
     facs.standardize_traits = standardize
+
     XMLConstructor.set_loadings!(facs, L_init)
     if shrink
+        set_values = true
+        if INITIALZE_SHRINKAGE
+            set_values = false
+        end
+
         XMLConstructor.set_shrinkage_mults!(facs,
                                             shapes = shapes,
                                             scales = scales,
-                                            set_values = true)
+                                            set_values = set_values)
     end
     like = XMLConstructor.get_traitLikelihood(bx)
 
@@ -198,6 +221,8 @@ function make_xml(run::XMLRun, vars::PipelineVariables, dir::String;
 
     ops = XMLConstructor.get_operators(bx)
 
+    ops[2].weight = 5.0
+
     lgo = XMLConstructor.get_loadings_op(bx)
     lgo.weight = 3.0
 
@@ -219,8 +244,11 @@ function make_xml(run::XMLRun, vars::PipelineVariables, dir::String;
     if FIX_GLOBAL && shrink
         error("not implemented")
     end
-    if FIX_FIRST && shrink
-        indices = collect(2:k)
+    if shrink
+        indices = collect(1:k)
+        if FIX_FIRST
+            indices = collect(2:k)
+        end
         XMLConstructor.set_muliplicative_gamma_indices(bx, indices)
     end
     # if FIX_GLOBAL && shrink
@@ -365,17 +393,20 @@ function run_pipeline(vars::PipelineVariables)
             svd_paths[i] = run_final_xml(vars, best_models[i], data, name = nms[i])
         end
 
+        if (vars.plot_loadings || vars.compute_k)
 
-        ## plot results
-        eff_ks = fill(-1, n_models)
-        for i = 1:n_models
-            eff_ks[i] = plot_loadings(vars, best_models[i], svd_paths[i])
-        end
 
-        if length(eff_ks) == 1
-            eff_ks = fill(eff_ks[1], length(vars.selection_statistics))
+            ## plot results
+            eff_ks = fill(-1, n_models)
+            for i = 1:n_models
+                eff_ks[i] = plot_loadings(vars, best_models[i], svd_paths[i])
+            end
+
+            if length(eff_ks) == 1
+                eff_ks = fill(eff_ks[1], length(vars.selection_statistics))
+            end
+            @show eff_ks
         end
-        @show eff_ks
     end
     t2 = time()
     write("time.txt", "$(t2 - t1) seconds")
@@ -407,6 +438,33 @@ function model_selection(vars::PipelineVariables, tree_data::TreeData)
                     tree_data.taxa, selection_data)
                     for i = 1:n_opts, j = 1:vars.repeats]
 
+    L_init = default_loadings(maximum(df.k), tree_data.P)
+    if vars.shrink && INITIALZE_SHRINKAGE && vars.make_selection_xml
+        init_run = XMLRun(vars.name, tree_data.newick,
+                          tree_data.taxa, selection_data)
+
+        init_run.k = maximum(df.k)
+        init_run.L_init = default_loadings(init_run.k, tree_data.P)
+        init_run.chain_length = 1000
+        init_run.filename = vars.name * "_init"
+        xml_path = make_xml(init_run, vars, select_dir)
+
+        RunBeast.run_beast(xml_path, seed = vars.beast_seed,
+                           overwrite = vars.overwrite,
+                           beast_jar = vars.beast_path)
+        log_file = basename(xml_path)[1:(end - 4)] * ".log"
+        cols, L_all = get_log_match(log_file, "L")
+        L_final = L_all[end, :]
+        L_final = reshape(L_final, tree_data.P, init_run.k)'
+        L_svd = svd(L_final)
+        L_init .= Diagonal(L_svd.S) * L_svd.Vt
+        display(L_init)
+        display(L_svd.S)
+        display(L_svd.Vt)
+        display(L_init * L_init')
+    end
+
+
     for i = 1:n_opts
         k_max = df.k[i]
         selection_exp = df.shape_exp[i]
@@ -427,7 +485,7 @@ function model_selection(vars::PipelineVariables, tree_data::TreeData)
         for j = 1:vars.repeats
             run = xmlruns[i, j]
             run.k = k_max
-            run.L_init = default_loadings(k_max, tree_data.P)
+            run.L_init = L_init[1:k_max, :]
             run.shrink = vars.shrink
             run.shape_multiplier = shape
             run.scale_multiplier = scale
@@ -560,11 +618,15 @@ function run_final_xml(vars::PipelineVariables, final_run::XMLRun, data::Matrix{
 
     start_ind = vars.constrain_loadings ? 2 : 1
 
-    SpecialSVDProcessing.svd_logs("$fn.log", svd_path, final_run.k, size(data, 2),
-                                  rotate_factors = true,
-                                  do_svd = !vars.shrink,
-                                  relevant_rows = collect(start_ind:final_run.k),
-                                  relevant_cols = collect(start_ind:size(data, 2)))
+    log_path = "$fn.log"
+    if isfile(log_path)
+
+        SpecialSVDProcessing.svd_logs("$fn.log", svd_path, final_run.k, size(data, 2),
+                                    rotate_factors = true,
+                                    do_svd = !vars.shrink,
+                                    relevant_rows = collect(start_ind:final_run.k),
+                                    relevant_cols = collect(start_ind:size(data, 2)))
+    end
 
     return svd_path
 end
