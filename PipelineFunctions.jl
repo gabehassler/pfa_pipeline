@@ -22,6 +22,7 @@ const SCALE = "scale"
 const BOTH = "both"
 const SCALE_BY = SHAPE
 const SCALE_BASES = true
+const K_FOLD = true
 
 # const LPD_STAT = "LPD"
 const MSE_STAT = "MSE"
@@ -295,24 +296,19 @@ function make_xml(run::XMLRun, vars::PipelineVariables, dir::String;
     return path
 end
 
-function remove_observations(data::Matrix{Float64}, sparsity::Float64;
+function remove_observations(data::Matrix{Float64}, inds::Vector{Int};
                              partition::Bool = PARTITION_MISSING)
-    if !(0.0 <= sparsity <= 1.0)
-        error("Must specify a sparsity between 0.0 and 1.0")
-    end
-
     obs_data = copy(data)
     mis_data = copy(data)
-
-    for i = 1:length(data)
-        if rand() < sparsity
-            obs_data[i] = NaN
-        elseif partition
-            mis_data[i] = NaN
-        end
+    obs_data[inds] .= NaN
+    if partition
+        obs_inds = setdiff(1:length(data), inds)
+        mis_data[obs_inds] .= NaN
     end
+
     return obs_data, mis_data
 end
+
 
 function safe_mkdir(dir::String)
     paths = splitpath(dir)
@@ -499,10 +495,38 @@ function model_selection(vars::PipelineVariables, tree_data::TreeData)
     end
 
     if vars.make_selection_xml
+        partitions = Int[]
+
+        n_points = length(selection_data)
+        if K_FOLD
+            reps = vars.repeats
+            sparsity = vars.sparsity
+            fold = Int(round(1.0 / sparsity))
+            # if abs(sparsity * reps - 1) > 1e-10
+            #     @warn "Sparsity is set to $sparsity but repeats are set " *
+            #         "to $reps. Ignoring sparsity and doing $reps-fold cross " *
+            #         "validation."
+            # end
+
+            fold_repeats, r = divrem(reps, fold)
+            @assert r == 0
+
+
+            partitions = rand(1:fold, n_points, fold_repeats)
+        end
+
         for j = 1:vars.repeats
+            if K_FOLD
+                fold_i = div(j - 1, fold) + 1
+                fold_val = j - fold * (fold_i - 1)
+
+                inds = findall(isequal(j), partitions[:, fold_i])
+            else
+                inds = findall(x -> x < vars.sparsity, rand(n_points))
+            end
             observed_data, missing_data =
                     remove_observations(selection_data,
-                            vars.sparsity,
+                            inds,
                             partition = true)
 
             for i = 1:n_opts
