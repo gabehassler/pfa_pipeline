@@ -12,7 +12,7 @@ using CSV, DataFrames, LinearAlgebra, Statistics, UnPack, RCall
 import Random
 
 
-const FIX_GLOBAL = false
+const FIX_GLOBAL = true
 const FIX_FIRST = true
 const INITIALZE_SHRINKAGE = true
 const BASE_SHAPE = 1.0
@@ -22,7 +22,7 @@ const SCALE = "scale"
 const BOTH = "both"
 const SCALE_BY = SHAPE
 const SCALE_BASES = true
-const K_FOLD = true
+const K_FOLD = false
 
 # const LPD_STAT = "LPD"
 const MSE_STAT = "MSE"
@@ -37,6 +37,7 @@ const label_dict = Dict(LPD_MARG => "$(trait_dict[LPD_MARG]).", LPD_COND => "$(t
 const mult_dict = Dict(LPD_MARG => 1, LPD_COND => 1, MSE_STAT => -1)
 
 const INIT_SHRINK_WITH_SVD = true
+const SAMPLED_HMC = true
 
 
 mutable struct XMLRun
@@ -156,14 +157,27 @@ function make_xml(run::XMLRun, vars::PipelineVariables, dir::String;
     end
 
     if shrink
+        if SAMPLED_HMC
+            bx = XMLConstructor.make_sampled_pfa_xml(data, taxa, newick, k,
+                                            chain_length = chain_length,
+                                            log_factors = log_factors,
+                                            timing = true,
+                                            force_ordered = true,
+                                            hmc_scale=false,
+                                            scale_together=false,
+                                            always_draw_factors=false)
+            set_screen_logEvery(bx, vars.beast_sle)
+            set_file_logEvery(bx, fle)
+        else
 
-        bx = XMLConstructor.make_orthogonal_pfa_xml(data, taxa, newick, k,
-                                        chain_length = chain_length,
-                                        sle = vars.beast_sle,
-                                        fle = fle,
-                                        log_factors = log_factors,
-                                        timing = true,
-                                        force_ordered = false)
+            bx = XMLConstructor.make_orthogonal_pfa_xml(data, taxa, newick, k,
+                                            chain_length = chain_length,
+                                            sle = vars.beast_sle,
+                                            fle = fle,
+                                            log_factors = log_factors,
+                                            timing = true,
+                                            force_ordered = false)
+        end
     else
         bx = XMLConstructor.make_pfa_xml(data, taxa, newick, k,
                                         chain_length = chain_length,
@@ -222,7 +236,7 @@ function make_xml(run::XMLRun, vars::PipelineVariables, dir::String;
 
     ops = XMLConstructor.get_operators(bx)
 
-    ops[2].weight = 5.0
+    # ops[2].weight = 5.0
 
     lgo = XMLConstructor.get_loadings_op(bx)
     lgo.weight = 3.0
@@ -246,11 +260,18 @@ function make_xml(run::XMLRun, vars::PipelineVariables, dir::String;
         error("not implemented")
     end
     if shrink
-        indices = collect(1:k)
-        if FIX_FIRST
-            indices = collect(2:k)
+        if FIX_GLOBAL
+            mgo = findfirst(x ->
+                    typeof(x) == XMLConstructor.ShrinkageScaleOperators,
+                    ops)
+            mgo.fix_globals = FIX_GLOBAL
+        else
+            indices = collect(1:k)
+            if FIX_FIRST
+                indices = collect(2:k)
+            end
+            XMLConstructor.set_muliplicative_gamma_indices(bx, indices)
         end
-        XMLConstructor.set_muliplicative_gamma_indices(bx, indices)
     end
     # if FIX_GLOBAL && shrink
     #     msop = ops[findfirst(x -> isa(x, XMLConstructor.ShrinkageScaleOperators), ops)]
@@ -650,6 +671,10 @@ function run_final_xml(vars::PipelineVariables, final_run::XMLRun, data::Matrix{
                                     do_svd = !vars.shrink,
                                     relevant_rows = collect(start_ind:final_run.k),
                                     relevant_cols = collect(start_ind:size(data, 2)))
+        if vars.standardize
+            n, p = size(data)
+            partition_variance(log_path, svd_path, n, final_run.k, p)
+        end
     end
 
     return svd_path
@@ -949,6 +974,92 @@ function import_r_functions()
     """
 end
 
+function partition_variance(F::AbstractArray{Float64, 2},
+                            L::AbstractArray{Float64, 2},
+                            λ::AbstractArray{Float64, 1})
+
+    k, p = size(L)
+    n, kf = size(F)
+    @assert k == kf
+    FtF = F' * F
+    LtL = L * L'
+    vs_single = zeros(k)
+    vs_pairwise = zeros(k, k)
+    for k1 = 1:k
+        vs_single[k1] = FtF[k1, k1] * LtL[k1, k1]
+        for k2 = (k1 + 1):k
+            vs_pairwise[k1, k2] = FtF[k1, k2] * LtL[k1, k2]
+            vs_pairwise[k2, k1] = vs_pairwise[k1, k2]
+        end
+    end
+
+    v_single = sum(vs_single)
+    v_pairwise = sum(vs_pairwise)
+
+    v_fac = v_single + v_pairwise
+    v_total = v_fac + sum(1.0 ./ λ) * n
+    perc_fac = v_fac / v_total
+    percs_fac_rel = [x / v_single for x in vs_single]
+    percs_fac_abs = [x / v_total for x in vs_single]
+
+    return (factor_percent = perc_fac,
+            individual_percents_abs = percs_fac_abs,
+            individual_percent = v_single / v_fac,
+            interaction_percent = v_pairwise / v_fac,
+            individual_percents_rel = percs_fac_rel,
+            )
+end
+
+function partition_variance(log_path::String, svd_path::String,
+                            n::Int, k::Int, p::Int;
+                            fac_start::String = "factors.",
+                            load_start::String = "L",
+                            prec_start::String = "factorPrecision",
+                            overwrite::Bool = true)
+
+    cols, data = get_log(svd_path)
+    fac_inds = findall(x -> startswith(x, fac_start), cols)
+    load_inds = findall(x -> startswith(x, load_start), cols)
+
+    prec_cols, prec_data = get_log_match(log_path, prec_start)
+
+    @assert length(fac_inds) == k * n
+    @assert length(load_inds) == k * p
+    @assert length(prec_cols) == p
+
+    states = size(data, 1)
+
+    new_cols = ["variancePercent.factors";
+                ["variancePercent.factor$i" for i = 1:k]
+                "relativeFactorContribution.marginal";
+                "relativeFactorContribution.covariance";
+                ["relativePercent.factor$i" for i = 1:k]
+                ]
+
+    new_data = zeros(states, length(new_cols))
+
+    for state = 1:states
+        F_state = @view data[state, fac_inds]
+        L_state = @view data[state, load_inds]
+        F = reshape(F_state, k, n)'
+        L = reshape(L_state, p, k)'
+        λ = @view prec_data[state, :]
+        partition = partition_variance(F, L, λ)
+
+        new_data[state, :] .= [partition.factor_percent;
+                              partition.individual_percents_abs;
+                              partition.individual_percent;
+                              partition.interaction_percent;
+                              partition.individual_percents_rel]
+    end
+
+    cols = overwrite ? [cols; new_cols] : new_cols
+    data = overwrite ? [data new_data] : new_data
+
+    new_path = overwrite ? svd_path :
+                            log_path[1:(end - 4)] * "varianceExplained.log"
+    make_log(new_path, data, cols, includes_states = true)
+end
 
 
 
