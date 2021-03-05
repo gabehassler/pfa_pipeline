@@ -12,7 +12,7 @@ using CSV, DataFrames, LinearAlgebra, Statistics, UnPack, RCall
 import Random
 
 
-const FIX_GLOBAL = true
+const FIX_GLOBAL = false
 const FIX_FIRST = true
 const INITIALZE_SHRINKAGE = true
 const BASE_SHAPE = 1.0
@@ -22,7 +22,7 @@ const SCALE = "scale"
 const BOTH = "both"
 const SCALE_BY = SHAPE
 const SCALE_BASES = true
-const K_FOLD = false
+const K_FOLD = true
 
 # const LPD_STAT = "LPD"
 const MSE_STAT = "MSE"
@@ -37,7 +37,8 @@ const label_dict = Dict(LPD_MARG => "$(trait_dict[LPD_MARG]).", LPD_COND => "$(t
 const mult_dict = Dict(LPD_MARG => 1, LPD_COND => 1, MSE_STAT => -1)
 
 const INIT_SHRINK_WITH_SVD = true
-const SAMPLED_HMC = true
+const SAMPLED_HMC = false
+
 
 
 mutable struct XMLRun
@@ -176,7 +177,7 @@ function make_xml(run::XMLRun, vars::PipelineVariables, dir::String;
                                             fle = fle,
                                             log_factors = log_factors,
                                             timing = true,
-                                            force_ordered = false)
+                                            force_ordered = true)
         end
     else
         bx = XMLConstructor.make_pfa_xml(data, taxa, newick, k,
@@ -199,15 +200,16 @@ function make_xml(run::XMLRun, vars::PipelineVariables, dir::String;
 
     XMLConstructor.set_loadings!(facs, L_init)
     if shrink
-        set_values = true
+        set_scale = true
         if INITIALZE_SHRINKAGE
-            set_values = false
+            set_scale = false
         end
 
         XMLConstructor.set_shrinkage_mults!(facs,
                                             shapes = shapes,
                                             scales = scales,
-                                            set_values = set_values)
+                                            set_scale = set_scale,
+                                            set_mults = true)
     end
     like = XMLConstructor.get_traitLikelihood(bx)
 
@@ -312,7 +314,6 @@ function make_xml(run::XMLRun, vars::PipelineVariables, dir::String;
         end
     end
     path = joinpath(dir, run.filename * ".xml")
-    # @show path
     XMLConstructor.save_xml(path, bx)
     return path
 end
@@ -475,10 +476,6 @@ function model_selection(vars::PipelineVariables, tree_data::TreeData)
         L_final = reshape(L_final, tree_data.P, init_run.k)'
         L_svd = svd(L_final)
         L_init .= Diagonal(L_svd.S) * L_svd.Vt
-        display(L_init)
-        display(L_svd.S)
-        display(L_svd.Vt)
-        display(L_init * L_init')
     end
 
 
