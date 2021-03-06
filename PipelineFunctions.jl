@@ -2,8 +2,9 @@ module PipelineFunctions
 
 export run_pipeline, safe_mkdir
 
-using BeastUtils.XMLConstructor, BeastUtils.DataStorage, BeastUtils.MatrixUtils,
-        BeastUtils.RunBeast, BeastUtils.Logs, BeastUtils.BeastNames, PosteriorSummary
+using BEASTXMLConstructor, BEASTXMLConstructor.BeastNames,
+      BeastUtils.DataStorage, BeastUtils.MatrixUtils,
+      BeastUtils.RunBeast, BeastUtils.Logs, PosteriorSummary
 
 push!(LOAD_PATH, @__DIR__)
 using SpecialSVDProcessing, ImportVariables
