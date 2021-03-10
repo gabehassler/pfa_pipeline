@@ -160,7 +160,7 @@ function make_xml(run::XMLRun, vars::PipelineVariables, dir::String;
 
     if shrink
         if SAMPLED_HMC
-            bx = XMLConstructor.make_sampled_pfa_xml(data, taxa, newick, k,
+            bx = BEASTXMLConstructor.make_sampled_pfa_xml(data, taxa, newick, k,
                                             chain_length = chain_length,
                                             log_factors = log_factors,
                                             timing = true,
@@ -172,7 +172,7 @@ function make_xml(run::XMLRun, vars::PipelineVariables, dir::String;
             set_file_logEvery(bx, fle)
         else
 
-            bx = XMLConstructor.make_orthogonal_pfa_xml(data, taxa, newick, k,
+            bx = BEASTXMLConstructor.make_orthogonal_pfa_xml(data, taxa, newick, k,
                                             chain_length = chain_length,
                                             sle = vars.beast_sle,
                                             fle = fle,
@@ -181,7 +181,7 @@ function make_xml(run::XMLRun, vars::PipelineVariables, dir::String;
                                             force_ordered = true)
         end
     else
-        bx = XMLConstructor.make_pfa_xml(data, taxa, newick, k,
+        bx = BEASTXMLConstructor.make_pfa_xml(data, taxa, newick, k,
                                         chain_length = chain_length,
                                         sle = vars.beast_sle,
                                         fle = fle,
@@ -191,28 +191,28 @@ function make_xml(run::XMLRun, vars::PipelineVariables, dir::String;
     end
 
     if vars.full_eval != -1
-        XMLConstructor.set_full_eval!(bx, vars.full_eval)
+        BEASTXMLConstructor.set_full_eval!(bx, vars.full_eval)
     end
 
 
-    mbd = XMLConstructor.get_mbd(bx)
-    facs = XMLConstructor.get_integratedFactorModel(bx)
+    mbd = BEASTXMLConstructor.get_mbd(bx)
+    facs = BEASTXMLConstructor.get_integratedFactorModel(bx)
     facs.standardize_traits = standardize
 
-    XMLConstructor.set_loadings!(facs, L_init)
+    BEASTXMLConstructor.set_loadings!(facs, L_init)
     if shrink
         set_scale = true
         if INITIALZE_SHRINKAGE
             set_scale = false
         end
 
-        XMLConstructor.set_shrinkage_mults!(facs,
+        BEASTXMLConstructor.set_shrinkage_mults!(facs,
                                             shapes = shapes,
                                             scales = scales,
                                             set_scale = set_scale,
                                             set_mults = true)
     end
-    like = XMLConstructor.get_traitLikelihood(bx)
+    like = BEASTXMLConstructor.get_traitLikelihood(bx)
 
     ind_dict = Dict{String, Int}()
 
@@ -224,9 +224,9 @@ function make_xml(run::XMLRun, vars::PipelineVariables, dir::String;
             trait_name = trait_dict[stat]
             if !(trait_name in nms)
                 if trait_name == JOINT
-                    XMLConstructor.add_trait!(bx, run.joint_data, trait_name)
+                    BEASTXMLConstructor.add_trait!(bx, run.joint_data, trait_name)
                 elseif trait_name == REMOVED
-                    XMLConstructor.add_trait!(bx, removed_data, trait_name)
+                    BEASTXMLConstructor.add_trait!(bx, removed_data, trait_name)
                 else
                     error("unknown trait name")
                 end
@@ -237,11 +237,11 @@ function make_xml(run::XMLRun, vars::PipelineVariables, dir::String;
         end
     end
 
-    ops = XMLConstructor.get_operators(bx)
+    ops = BEASTXMLConstructor.get_operators(bx)
 
     # ops[2].weight = 5.0
 
-    lgo = XMLConstructor.get_loadings_op(bx)
+    lgo = BEASTXMLConstructor.get_loadings_op(bx)
     lgo.weight = 3.0
 
     if vars.constrain_loadings
@@ -251,7 +251,7 @@ function make_xml(run::XMLRun, vars::PipelineVariables, dir::String;
             mask[2:end, 2:end] .= 1.0
             lgo.mask = vec(mask)
 
-            lgo2 = XMLConstructor.LoadingsGibbsOperatorXMLElement(facs, like)
+            lgo2 = BEASTXMLConstructor.LoadingsGibbsOperatorXMLElement(facs, like)
             lgo2.sparsity = "firstRow"
             push!(ops, lgo2)
         else
@@ -265,7 +265,7 @@ function make_xml(run::XMLRun, vars::PipelineVariables, dir::String;
     if shrink
         if FIX_GLOBAL
             mgo = findfirst(x ->
-                    typeof(x) == XMLConstructor.ShrinkageScaleOperators,
+                    typeof(x) == BEASTXMLConstructor.ShrinkageScaleOperators,
                     ops)
             mgo.fix_globals = FIX_GLOBAL
         else
@@ -273,15 +273,15 @@ function make_xml(run::XMLRun, vars::PipelineVariables, dir::String;
             if FIX_FIRST
                 indices = collect(2:k)
             end
-            XMLConstructor.set_muliplicative_gamma_indices(bx, indices)
+            BEASTXMLConstructor.set_muliplicative_gamma_indices(bx, indices)
         end
     end
     # if FIX_GLOBAL && shrink
-    #     msop = ops[findfirst(x -> isa(x, XMLConstructor.ShrinkageScaleOperators), ops)]
+    #     msop = ops[findfirst(x -> isa(x, BEASTXMLConstructor.ShrinkageScaleOperators), ops)]
     #     msop.fix_globals = true
     # end
     # if FIX_FIRST && shrink
-    #     msop = ops[findfirst(x -> isa(x, XMLConstructor.ShrinkageScaleOperators), ops)]
+    #     msop = ops[findfirst(x -> isa(x, BEASTXMLConstructor.ShrinkageScaleOperators), ops)]
     #     msop.fix_first = true
     # end
 
@@ -291,23 +291,23 @@ function make_xml(run::XMLRun, vars::PipelineVariables, dir::String;
         for stat in selection_stats
 
             if stat == LPD_COND || stat == LPD_MARG
-                flpd = XMLConstructor.FactorLogPredictiveDensity(facs, like, trait_ind = ind_dict[trait_dict[stat]])
-                XMLConstructor.add_loggable(bx, flpd, already_made = false)
+                flpd = BEASTXMLConstructor.FactorLogPredictiveDensity(facs, like, trait_ind = ind_dict[trait_dict[stat]])
+                BEASTXMLConstructor.add_loggable(bx, flpd, already_made = false)
             elseif stat == MSE_STAT
-                tree_model = XMLConstructor.get_treeModel(bx)
+                tree_model = BEASTXMLConstructor.get_treeModel(bx)
 
                 trait_validation =
-                    XMLConstructor.TraitValidationXMLElement(tree_model, like)
+                    BEASTXMLConstructor.TraitValidationXMLElement(tree_model, like)
 
                 cross_validation =
-                    XMLConstructor.CrossValidationXMLElement(trait_validation)
+                    BEASTXMLConstructor.CrossValidationXMLElement(trait_validation)
 
-                XMLConstructor.set_validation_type!(cross_validation,
+                BEASTXMLConstructor.set_validation_type!(cross_validation,
                                                     BeastNames.SQUARED_ERROR)
 
-                XMLConstructor.set_log_sum!(cross_validation, true)
+                BEASTXMLConstructor.set_log_sum!(cross_validation, true)
 
-                XMLConstructor.add_loggable(bx, cross_validation,
+                BEASTXMLConstructor.add_loggable(bx, cross_validation,
                                             already_made=false)
             else
                 error("unknown statistic")
@@ -315,7 +315,7 @@ function make_xml(run::XMLRun, vars::PipelineVariables, dir::String;
         end
     end
     path = joinpath(dir, run.filename * ".xml")
-    XMLConstructor.save_xml(path, bx)
+    BEASTXMLConstructor.save_xml(path, bx)
     return path
 end
 
@@ -615,6 +615,7 @@ function model_selection(vars::PipelineVariables, tree_data::TreeData)
     ## Figure out which model is best
 
     n_stats = length(vars.selection_statistics)
+    @show statistic_paths
 
     for path in statistic_paths
         if !isfile(path)
@@ -768,11 +769,12 @@ end
 
 function process_log(vars::PipelineVariables, log_path::String,
                      csv_path::String, data_path::String,
-                     labels_path::String)
+                     labels_path::String; scale_by_factors::Bool = true)
 
     cols, data = get_log(log_path, burnin = vars.plot_burnin)
     L_header = "L"
     sv_header = "sv"
+    fac_header = "factors."
 
     L_inds = findall(x -> startswith(x, L_header), cols)
     sv_inds = findall(x -> startswith(x, sv_header), cols)
@@ -805,6 +807,23 @@ function process_log(vars::PipelineVariables, log_path::String,
 
     row_counts = zeros(Int, k)
 
+    stdev_adjustments = ones(n, k)
+
+    if scale_by_factors
+        fac_inds = findall(startswith(fac_header), cols)
+        n_taxa, r = divrem(length(fac_inds), k)
+        @assert r == 0
+        F_cols = @view cols[fac_inds]
+        F_data = @view data[:, fac_inds]
+
+        for i = 1:n
+            F = reshape(F_data[i, :], k, n_taxa)
+            stds = std(F, dims=2, corrected=false)
+            stdev_adjustments[i, :] .= vec(stds)
+        end
+    end
+
+
 
     for i = 1:k
         for j in 1:p
@@ -816,7 +835,7 @@ function process_log(vars::PipelineVariables, log_path::String,
             df.col[ind] = perm[j]
             df.row[ind] = i
 
-            vals = @view(L_data[:, ind])
+            vals = @view(L_data[:, ind]) .* @view(stdev_adjustments[:, i])
             μ = mean(vals)
             df.L[ind] = μ
 
@@ -927,7 +946,7 @@ function import_r_functions()
         p <- ggplot(df) +
             geom_hline(yintercept=0, linetype="dashed") +
             geom_point(aes(x=trait, y=L, color=sign), size=1.5) +
-            geom_errorbar(aes(x=trait, ymin=hpdl, ymax=hpdu, color=sign), width=0.25, size=1) +
+            geom_errorbar(aes(x=trait, ymin=hpdl, ymax=hpdu, color=sign), width=0.0, size=1) +
             scale_color_manual(values=pal) +
             # scale_color_gradient2(low="orange", mid="white", high="purple", limits=c(-1, 1), name="L") +
             #facet_grid(~ cat, scales="free_x", space="free_x") +
@@ -937,7 +956,7 @@ function import_r_functions()
             # scale_y_discrete() +
             labs(y="loadings", x="") +
             theme_minimal() +
-            theme(axis.text.x = element_text(angle=90, hjust=1),
+            theme(axis.text.x = element_text(angle=90, hjust=1, size=4),
                 panel.border = element_rect(colour = "black", fill=NA),
                 panel.grid.major.y = element_blank(),
                 panel.grid.minor.y = element_blank(),
