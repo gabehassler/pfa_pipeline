@@ -717,7 +717,7 @@ function plot_loadings(vars::PipelineVariables, final_run::XMLRun, svd_path::Str
         import_r_functions()
 
         R"""
-        pretty_names <- read.csv(tmp_path)$levs
+        pretty_names <- read.csv(tmp_path, encoding="UTF-8")$levs
         plot_loadings(csv_path, plot_path, pretty_names, cat_levs)
         """
 
@@ -903,7 +903,7 @@ function import_r_functions()
     library(ggplot2)
     library(wesanderson)
     plot_loadings <- function(csv_path, plot_name, trait_levs, cat_levs){
-        df  <- read.csv(csv_path, header=TRUE)
+        df  <- read.csv(csv_path, header=TRUE, encoding="UTF-8")
 
         df$trait <- factor(df$trait, levels=trait_levs)
         df$cat <- factor(df$cat, levels=cat_levs)
