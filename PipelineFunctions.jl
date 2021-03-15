@@ -241,7 +241,7 @@ function make_xml(run::XMLRun, vars::PipelineVariables, dir::String;
 
     # ops[2].weight = 5.0
 
-    lgo = BEASTXMLConstructor.get_loadings_op(bx)
+    lgo = BEASTXMLConstructor.get_loadings_op(bx, component = "matrix")
     lgo.weight = 3.0
 
     if vars.constrain_loadings
