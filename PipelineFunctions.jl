@@ -23,7 +23,7 @@ const SCALE = "scale"
 const BOTH = "both"
 const SCALE_BY = SHAPE
 const SCALE_BASES = true
-const K_FOLD = true
+const K_FOLD = false
 
 # const LPD_STAT = "LPD"
 const MSE_STAT = "MSE"
