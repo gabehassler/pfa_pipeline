@@ -908,21 +908,24 @@ function import_r_functions()
         df$trait <- factor(df$trait, levels=trait_levs)
         df$cat <- factor(df$cat, levels=cat_levs)
         df$L <- sapply(df$L, as.numeric)
-        # df$sign_perc <- df$perc
-        # for (i in 1:length(df$perc)) {
-        #   if (df$L[i] < 0.0) {
-        #     df$sign_perc[i] <- -df$sign_perc[i]
-        #   }
-        # }
-
-        df$sign <- sapply(df$L, sign)
-        n <- dim(df)[[1]]
-        for (i in 1:n) {
-            if (df$hpdl[i] <= 0 && df$hpdu[i] >= 0) {
-            df$sign[i] = 0
-            }
+        df$sign_perc <- df$perc
+        for (i in 1:length(df$perc)) {
+          if (df$L[i] < 0.0) {
+            df$sign_perc[i] <- 1 - df$sign_perc[i]
+          }
+          if (df$hpdl[i] == 0 && df$hpdu[i] == 0) {
+            df$sign_perc[i] <- 0.5
+          }
         }
-        df$sign <- factor(df$sign, levels=c(1, 0, -1))
+
+        # df$sign <- sapply(df$L, sign)
+        # n <- dim(df)[[1]]
+        # for (i in 1:n) {
+        #     if (df$hpdl[i] <= 0 && df$hpdu[i] >= 0) {
+        #     df$sign[i] = 0
+        #     }
+        # }
+        # df$sign <- factor(df$sign, levels=c(1, 0, -1))
         ymin = min(df$hpdl)
         ymax = max(df$hpdu)
 
@@ -945,9 +948,9 @@ function import_r_functions()
 
         p <- ggplot(df) +
             geom_hline(yintercept=0, linetype="dashed") +
-            geom_point(aes(x=trait, y=L, color=sign), size=1.5) +
-            geom_errorbar(aes(x=trait, ymin=hpdl, ymax=hpdu, color=sign), width=0.0, size=1) +
-            scale_color_manual(values=pal) +
+            geom_point(aes(x=trait, y=L, color=sign_perc), size=1.5) +
+            geom_errorbar(aes(x=trait, ymin=hpdl, ymax=hpdu, color=sign_perc), width=0.0, size=1) +
+            scale_color_gradient2(low="blue", mid="grey", high="red", midpoint=0.5, limits=c(0, 1), name="probability > 0") +
             # scale_color_gradient2(low="orange", mid="white", high="purple", limits=c(-1, 1), name="L") +
             #facet_grid(~ cat, scales="free_x", space="free_x") +
             #geom_tile() +
@@ -959,8 +962,8 @@ function import_r_functions()
             theme(axis.text.x = element_text(angle=90, hjust=1, size=4),
                 panel.border = element_rect(colour = "black", fill=NA),
                 panel.grid.major.y = element_blank(),
-                panel.grid.minor.y = element_blank(),
-                legend.position = "none"
+                panel.grid.minor.y = element_blank()#,
+                # legend.position = "none"
                 ) +
             ylim(ymin, ymax) +
             facet_grid(cols=vars(cat),
